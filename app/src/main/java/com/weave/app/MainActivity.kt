@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.room.Room
@@ -24,7 +25,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        val db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "weave_database").build()
+        val db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "weave_database")
+            .fallbackToDestructiveMigration().build()
 
         setContent {
             var notifications by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
@@ -36,7 +38,6 @@ class MainActivity : ComponentActivity() {
             }
 
             Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0A0A0A))) {
-                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -51,7 +52,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // List
                 if (notifications.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Waiting for messages...", color = Color.Gray)
@@ -61,11 +61,25 @@ class MainActivity : ComponentActivity() {
                         items(notifications) { notif ->
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A))
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (notif.isDeleted) Color(0xFF2A0A0A) else Color(0xFF1A1A1A)
+                                )
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(notif.sender, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
-                                    Text(notif.message, color = Color.White)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(notif.sender, color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold)
+                                        if (notif.isDeleted) {
+                                            Text("DELETED", color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    Text(
+                                        text = notif.message,
+                                        color = Color.White,
+                                        textDecoration = if (notif.isDeleted) TextDecoration.LineThrough else TextDecoration.None
+                                    )
                                 }
                             }
                         }
