@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.room.Room
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch // <--- YE IMPORT MISSING THA!
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,7 +71,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainLayout(isDarkTheme: Boolean, onThemeToggle: () -> Unit) {
     var selectedTab by remember { mutableStateOf(0) }
-    var showMenu by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
