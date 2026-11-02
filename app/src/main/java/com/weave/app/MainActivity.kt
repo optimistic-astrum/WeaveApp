@@ -144,7 +144,6 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
     }
 }
 
-// 3D Animated Glass Dock
 @Composable
 fun GlassDock(selectedScreen: Int, onScreenSelected: (Int) -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp).navigationBarsPadding(), contentAlignment = Alignment.Center) {
@@ -169,7 +168,6 @@ fun DockItem(icon: ImageVector, label: String, isSelected: Boolean, onClick: () 
     val tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     val bg = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
     
-    // Bounce Animation for selected item
     val scale by animateFloatAsState(
         targetValue = if (isSelected) 1.15f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
@@ -196,13 +194,11 @@ fun DrawerItem(title: String, icon: ImageVector, isSelected: Boolean, onClick: (
     NavigationDrawerItem(label = { Text(title) }, icon = { Icon(icon, contentDescription = null) }, selected = isSelected, onClick = onClick, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
 }
 
-// 3D Animated Message Card
 @Composable
 fun MessageCard(notif: NotificationEntity) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     
-    // Press Animation (3D Press Effect)
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
@@ -215,9 +211,9 @@ fun MessageCard(notif: NotificationEntity) {
             .padding(vertical = 6.dp)
             .scale(scale)
             .clickable(interactionSource = interactionSource, indication = null) { },
-        shape = RoundedCornerShape(20.dp), // Zyada rounded
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = if (notif.isDeleted) Color(0xFF3A0A0A) else MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp) // 3D Shadow
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
