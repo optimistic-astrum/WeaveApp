@@ -19,7 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -86,7 +85,7 @@ fun isBatteryOptimizationDisabled(context: Context): Boolean {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
-    var showScreen by remember { mutableStateOf(0) } // 0=Home, 1=Chats, 2=Groups, 3=Ghost, 4=Settings
+    var showScreen by remember { mutableStateOf(0) } 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -114,7 +113,7 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
                     title = { Text(when(showScreen){0->"Dashboard";1->"Chats";2->"Groups";3->"Ghost Vault";else->"Settings"}, fontWeight = FontWeight.Bold) },
                     navigationIcon = { 
                         if (showScreen != 0) {
-                            IconButton(onClick = { showScreen = 0 }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                            IconButton(onClick = { showScreen = 0 }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
                         } else {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
                         }
