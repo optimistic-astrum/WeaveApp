@@ -1,8 +1,6 @@
 package com.weave.app
 import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
@@ -18,19 +16,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+
 class SplashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             var visible by remember { mutableStateOf(false) }
-            val scale by animateFloatAsState(targetValue = if (visible) 1f else 0.5f, animationSpec = tween(1000, easing = EaseOutBack), label = "scale")
-            val alpha by animateFloatAsState(targetValue = if (visible) 1f else 0f, animationSpec = tween(1000), label = "alpha")
+            val scale by animateFloatAsState(if (visible) 1f else 0.5f, tween(1000, easing = EaseOutBack), label = "s")
+            val alpha by animateFloatAsState(if (visible) 1f else 0f, tween(1000), label = "a")
+            
             LaunchedEffect(Unit) {
                 visible = true
-                Handler(Looper.getMainLooper()).postDelayed({
-                    startActivity(Intent(this@SplashActivity, MainActivity::class.java))
-                    finish()
-                }, 2000)
+                delay(2000)
+                startActivity(Intent(this@SplashActivity, MainActivity::class.java))
+                finish()
             }
             Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0A0A0A)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
