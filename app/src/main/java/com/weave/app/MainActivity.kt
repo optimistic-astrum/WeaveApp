@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.room.Room
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch // <--- YE IMPORT MISSING THA!
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// YAHAN @OptIn ADD KIYA HAI
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainLayout(isDarkTheme: Boolean, onThemeToggle: () -> Unit) {
