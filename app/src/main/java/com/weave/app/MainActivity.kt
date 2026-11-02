@@ -67,7 +67,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// YAHAN @OptIn ADD KIYA HAI
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainLayout(isDarkTheme: Boolean, onThemeToggle: () -> Unit) {
