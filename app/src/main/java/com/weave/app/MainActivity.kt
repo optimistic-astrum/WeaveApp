@@ -10,8 +10,11 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,6 +28,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -52,8 +56,8 @@ class MainActivity : ComponentActivity() {
             val colorScheme = when (currentTheme) {
                 WeaveTheme.DARK -> DarkColors
                 WeaveTheme.LIGHT -> LightColors
-                WeaveTheme.AMOLED -> AmoledColors
-                WeaveTheme.CYBERPUNK -> CyberpunkColors
+                WeaveTheme.OCEAN -> OceanColors
+                WeaveTheme.SUNSET -> SunsetColors
             }
 
             MaterialTheme(colorScheme = colorScheme) {
@@ -101,6 +105,7 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
                 DrawerItem("Chats", Icons.Default.Person, showScreen == 1) { showScreen = 1; scope.launch { drawerState.close() } }
                 DrawerItem("Groups", Icons.Default.Group, showScreen == 2) { showScreen = 2; scope.launch { drawerState.close() } }
                 DrawerItem("Ghost Vault", Icons.Default.Delete, showScreen == 3) { showScreen = 3; scope.launch { drawerState.close() } }
+                DrawerItem("Status & Media", Icons.Default.Photo, showScreen == 5) { showScreen = 5; scope.launch { drawerState.close() } }
                 DrawerItem("Settings", Icons.Default.Settings, showScreen == 4) { showScreen = 4; scope.launch { drawerState.close() } }
                 Spacer(modifier = Modifier.weight(1f))
                 Text("Developed by Arif Ali", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(16.dp))
@@ -110,7 +115,7 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(when(showScreen){0->"Dashboard";1->"Chats";2->"Groups";3->"Ghost Vault";else->"Settings"}, fontWeight = FontWeight.Bold) },
+                    title = { Text(when(showScreen){0->"Dashboard";1->"Chats";2->"Groups";3->"Ghost Vault";5->"Status & Media";else->"Settings"}, fontWeight = FontWeight.Bold) },
                     navigationIcon = { 
                         if (showScreen != 0) {
                             IconButton(onClick = { showScreen = 0 }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
@@ -132,25 +137,28 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
                     2 -> GroupScreen()
                     3 -> GhostVaultScreen()
                     4 -> SettingsScreen(currentTheme, onThemeChange)
+                    5 -> StatusAndMediaScreen()
                 }
             }
         }
     }
 }
 
+// 3D Animated Glass Dock
 @Composable
 fun GlassDock(selectedScreen: Int, onScreenSelected: (Int) -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp).navigationBarsPadding(), contentAlignment = Alignment.Center) {
         Row(
             modifier = Modifier.clip(RoundedCornerShape(30.dp))
                 .background(brush = Brush.verticalGradient(colors = listOf(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))))
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically
         ) {
             DockItem(Icons.Default.Home, "Home", selectedScreen == 0) { onScreenSelected(0) }
             DockItem(Icons.Default.Person, "Chats", selectedScreen == 1) { onScreenSelected(1) }
             DockItem(Icons.Default.Group, "Groups", selectedScreen == 2) { onScreenSelected(2) }
             DockItem(Icons.Default.Delete, "Ghost", selectedScreen == 3) { onScreenSelected(3) }
+            DockItem(Icons.Default.Photo, "Media", selectedScreen == 5) { onScreenSelected(5) }
             DockItem(Icons.Default.Settings, "Settings", selectedScreen == 4) { onScreenSelected(4) }
         }
     }
@@ -160,10 +168,26 @@ fun GlassDock(selectedScreen: Int, onScreenSelected: (Int) -> Unit) {
 fun DockItem(icon: ImageVector, label: String, isSelected: Boolean, onClick: () -> Unit) {
     val tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     val bg = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
-    Column(modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(bg).clickable { onClick() }.padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(24.dp))
+    
+    // Bounce Animation for selected item
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.15f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "dock_bounce"
+    )
+
+    Column(
+        modifier = Modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(20.dp))
+            .background(bg)
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.height(4.dp))
-        Text(label, color = tint, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+        Text(label, color = tint, fontSize = 9.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
     }
 }
 
@@ -172,12 +196,28 @@ fun DrawerItem(title: String, icon: ImageVector, isSelected: Boolean, onClick: (
     NavigationDrawerItem(label = { Text(title) }, icon = { Icon(icon, contentDescription = null) }, selected = isSelected, onClick = onClick, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
 }
 
+// 3D Animated Message Card
 @Composable
 fun MessageCard(notif: NotificationEntity) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    // Press Animation (3D Press Effect)
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "card_press"
+    )
+
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .scale(scale)
+            .clickable(interactionSource = interactionSource, indication = null) { },
+        shape = RoundedCornerShape(20.dp), // Zyada rounded
         colors = CardDefaults.cardColors(containerColor = if (notif.isDeleted) Color(0xFF3A0A0A) else MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp) // 3D Shadow
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -190,7 +230,7 @@ fun MessageCard(notif: NotificationEntity) {
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(text = notif.message, color = MaterialTheme.colorScheme.onSurfaceVariant, textDecoration = if (notif.isDeleted) TextDecoration.LineThrough else TextDecoration.None, fontSize = 14.sp)
         }
     }
@@ -220,7 +260,13 @@ fun GhostVaultScreen() {
     val db = Room.databaseBuilder(context, AppDatabase::class.java, "weave_database").fallbackToDestructiveMigration().build()
     var deletedMessages by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
     LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { deletedMessages = it.filter { msg -> msg.isDeleted } } }
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(deletedMessages) { notif -> MessageCard(notif) } } }
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { 
+        if (deletedMessages.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No deleted messages recovered yet.", color = Color.Gray) }
+        } else {
+            LazyColumn { items(deletedMessages) { notif -> MessageCard(notif) } } 
+        }
+    }
 }
 
 @Composable
@@ -233,10 +279,33 @@ fun HomeScreen() {
 }
 
 @Composable
+fun StatusAndMediaScreen() {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+        Text("Statuses & Media", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(modifier = Modifier.height(16.dp))
+        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), elevation = CardDefaults.cardElevation(4.dp)) {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text("Profile Picture Downloader", fontWeight = FontWeight.Bold)
+                    Text("Coming soon...", color = Color.Gray, fontSize = 12.sp)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+            Text("Captured statuses will appear here.", color = Color.Gray)
+        }
+    }
+}
+
+@Composable
 fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
     val context = LocalContext.current
     var notifAccess by remember { mutableStateOf(isNotificationAccessGranted(context)) }
     var batteryOpt by remember { mutableStateOf(isBatteryOptimizationDisabled(context)) }
+    var hapticEnabled by remember { mutableStateOf(true) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Appearance", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -244,15 +313,15 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ThemeChip("Dark", WeaveTheme.DARK, currentTheme, onThemeChange)
             ThemeChip("Light", WeaveTheme.LIGHT, currentTheme, onThemeChange)
-            ThemeChip("AMOLED", WeaveTheme.AMOLED, currentTheme, onThemeChange)
-            ThemeChip("Cyberpunk", WeaveTheme.CYBERPUNK, currentTheme, onThemeChange)
+            ThemeChip("Ocean", WeaveTheme.OCEAN, currentTheme, onThemeChange)
+            ThemeChip("Sunset", WeaveTheme.SUNSET, currentTheme, onThemeChange)
         }
         
         Spacer(modifier = Modifier.height(24.dp))
         Text("Permissions", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(8.dp))
         
-        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), elevation = CardDefaults.cardElevation(2.dp)) {
             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(16.dp))
@@ -263,7 +332,7 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
             }
         }
         
-        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS); intent.data = Uri.parse("package:${context.packageName}"); context.startActivity(intent) }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS); intent.data = Uri.parse("package:${context.packageName}"); context.startActivity(intent) }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), elevation = CardDefaults.cardElevation(2.dp)) {
             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.BatteryFull, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(16.dp))
@@ -271,6 +340,16 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
                     Text("Battery Optimization", fontWeight = FontWeight.Bold)
                     Text(if (batteryOpt) "Disabled ✓" else "Tap to Disable", color = if (batteryOpt) Color.Green else Color.Red, fontSize = 12.sp)
                 }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Customization", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(8.dp))
+        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), elevation = CardDefaults.cardElevation(2.dp)) {
+            Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Haptic Feedback (Vibration)", fontWeight = FontWeight.Bold)
+                Switch(checked = hapticEnabled, onCheckedChange = { hapticEnabled = it })
             }
         }
     }
@@ -282,7 +361,8 @@ fun ThemeChip(label: String, theme: WeaveTheme, selectedTheme: WeaveTheme, onThe
     Card(
         modifier = Modifier.clickable { onThemeChange(theme) },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Text(label, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontSize = 12.sp)
     }
