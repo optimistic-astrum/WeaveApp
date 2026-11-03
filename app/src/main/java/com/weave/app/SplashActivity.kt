@@ -17,7 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-
 class SplashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,14 +24,7 @@ class SplashActivity : ComponentActivity() {
             var visible by remember { mutableStateOf(false) }
             val scale by animateFloatAsState(if (visible) 1f else 0.5f, tween(1000, easing = EaseOutBack), label = "s")
             val alpha by animateFloatAsState(if (visible) 1f else 0f, tween(1000), label = "a")
-            
-            LaunchedEffect(Unit) {
-                visible = true
-                delay(1500)
-                startActivity(Intent(this@SplashActivity, MainActivity::class.java))
-                finish()
-            }
-            // Golden Cream Background
+            LaunchedEffect(Unit) { visible = true; delay(1500); startActivity(Intent(this@SplashActivity, MainActivity::class.java)); finish() }
             Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFFF8E1)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("WEAVE", color = Color(0xFFFFB300), fontSize = 52.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.scale(scale).alpha(alpha))

@@ -1,5 +1,7 @@
 package com.weave.app
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -14,7 +16,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -35,8 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -61,6 +60,7 @@ class MainActivity : ComponentActivity() {
             val prefs = context.getSharedPreferences("weave_prefs", Context.MODE_PRIVATE)
             var isSetupDone by remember { mutableStateOf(prefs.getBoolean("setup_done", false)) }
             var currentTheme by remember { mutableStateOf(WeaveTheme.valueOf(prefs.getString("theme", "DARK") ?: "DARK")) }
+            var appLanguage by remember { mutableStateOf(prefs.getString("language", "EN") ?: "EN") }
 
             val colorScheme = when (currentTheme) {
                 WeaveTheme.DARK -> DarkColors
@@ -73,29 +73,23 @@ class MainActivity : ComponentActivity() {
                 if (!isSetupDone) {
                     SetupScreen(context) { prefs.edit().putBoolean("setup_done", true).apply(); isSetupDone = true }
                 } else {
-                    MainLayout(currentTheme, onThemeChange = { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme })
+                    MainLayout(currentTheme, appLanguage, onThemeChange = { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme }, onLanguageChange = { newLang -> prefs.edit().putString("language", newLang).apply(); appLanguage = newLang })
                 }
             }
         }
     }
 }
 
-val shizukuListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
-    if (grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-        ShizukuManager.isGranted = true
-    }
-}
-
+val shizukuListener = Shizuku.OnRequestPermissionResultListener { _, grantResult -> if (grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED) ShizukuManager.isGranted = true }
 fun isNotificationAccessGranted(context: Context): Boolean = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
 fun isBatteryOptimizationDisabled(context: Context): Boolean = (context.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(context.packageName)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
-fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
-    var showScreen by remember { mutableStateOf(0) } // 0=Home, 1=Chats, 2=Groups, 3=Ghost, 4=Settings, 5=Media, 6=DP
+fun MainLayout(currentTheme: WeaveTheme, appLanguage: String, onThemeChange: (WeaveTheme) -> Unit, onLanguageChange: (String) -> Unit) {
+    var showScreen by remember { mutableStateOf(0) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-
     BackHandler(enabled = showScreen != 0) { showScreen = 0 }
 
     ModalNavigationDrawer(
@@ -137,7 +131,7 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
                         1 -> ChatScreen()
                         2 -> GroupScreen()
                         3 -> GhostVaultScreen()
-                        4 -> SettingsScreen(currentTheme, onThemeChange)
+                        4 -> SettingsScreen(currentTheme, appLanguage, onThemeChange, onLanguageChange)
                         5 -> MediaVaultScreen()
                         6 -> DPDownloaderScreen()
                     }
@@ -163,7 +157,6 @@ fun DrawerItem(title: String, icon: ImageVector, isSelected: Boolean, onClick: (
     NavigationDrawerItem(label = { Text(title, fontWeight = FontWeight.Medium) }, icon = { Icon(icon, contentDescription = null) }, selected = isSelected, onClick = onClick, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
 }
 
-// DASHBOARD SCREEN (Naya aur Attractive)
 @Composable
 fun DashboardScreen() {
     val context = LocalContext.current
@@ -176,17 +169,13 @@ fun DashboardScreen() {
         db.notificationDao().getAllNotifications().collectLatest { allMsgs -> 
             totalMessages = allMsgs.size
             totalDeleted = allMsgs.count { it.isDeleted || it.message.lowercase().contains("delete") }
-            
             val map = mutableMapOf<String, String>()
-            for (msg in allMsgs) {
-                if (!map.containsKey(msg.sender)) map[msg.sender] = msg.message
-            }
+            for (msg in allMsgs) { if (!map.containsKey(msg.sender)) map[msg.sender] = msg.message }
             recentChats = map
         } 
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Stats Cards (Attractive Look)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -206,7 +195,7 @@ fun DashboardScreen() {
         Spacer(modifier = Modifier.height(8.dp))
         
         LazyColumn { 
-            items(recentChats.toList().take(5)) { (sender, lastMsg) -> 
+            items(recentChats.toList().take(3)) { (sender, lastMsg) -> 
                 ContactChatCard(sender, lastMsg) {
                     val intent = Intent(context, ChatDetailActivity::class.java)
                     intent.putExtra("contact_name", sender)
@@ -240,20 +229,32 @@ fun ContactChatCard(senderName: String, lastMessage: String, onClick: () -> Unit
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen() {
     val context = LocalContext.current
     val db = DatabaseProvider.getDatabase(context)
     var chats by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
-    // Contact wise filter (avoid duplicates on same screen)
+    var searchQuery by remember { mutableStateOf("") }
+
     LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { allMsgs -> chats = allMsgs.filter { msg -> !msg.sender.contains("(") }.distinctBy { it.sender } } }
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(chats) { notif -> 
-        ContactChatCard(notif.sender, notif.message) {
-            val intent = Intent(context, ChatDetailActivity::class.java)
-            intent.putExtra("contact_name", notif.sender)
-            context.startActivity(intent)
-        }
-    } } }
+    val filteredChats = chats.filter { it.sender.contains(searchQuery, ignoreCase = true) || it.message.contains(searchQuery, ignoreCase = true) }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { 
+        OutlinedTextField(
+            value = searchQuery, onValueChange = { searchQuery = it }, label = { Text("Search Chats...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), shape = RoundedCornerShape(16.dp)
+        )
+        LazyColumn { 
+            items(filteredChats) { notif -> 
+                ContactChatCard(notif.sender, notif.message) {
+                    val intent = Intent(context, ChatDetailActivity::class.java)
+                    intent.putExtra("contact_name", notif.sender)
+                    context.startActivity(intent)
+                }
+            } 
+        } 
+    }
 }
 
 @Composable
@@ -276,15 +277,7 @@ fun GhostVaultScreen() {
     val context = LocalContext.current
     val db = DatabaseProvider.getDatabase(context)
     var deletedMessages by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
-    
-    LaunchedEffect(Unit) { 
-        db.notificationDao().getAllNotifications().collectLatest { allMsgs -> 
-            deletedMessages = allMsgs.filter { msg -> 
-                msg.isDeleted || msg.message.lowercase().contains("deleted") 
-            } 
-        } 
-    }
-    
+    LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { allMsgs -> deletedMessages = allMsgs.filter { msg -> msg.isDeleted || msg.message.lowercase().contains("deleted") } } }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { 
         if (deletedMessages.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No deleted messages recovered yet.", color = Color.Gray) }
@@ -318,22 +311,25 @@ fun MediaVaultScreen() {
     }
 }
 
+// MODERN DP DOWNLOADER SCREEN
 @Composable
 fun DPDownloaderScreen() {
     val context = LocalContext.current
     var number by remember { mutableStateOf("") }
     var shizukuConnected by remember { mutableStateOf(ShizukuManager.checkPermission()) }
+    var previewImagePath by remember { mutableStateOf<String?>(null) }
+    var isScanning by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         Shizuku.addRequestPermissionResultListener(shizukuListener)
         onDispose { Shizuku.removeRequestPermissionResultListener(shizukuListener) }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("DP Downloader (Shizuku)", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("DP Scanner", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 28.sp)
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Enter number with country code. Requires Shizuku.", color = Color.Gray, fontSize = 12.sp)
-        Spacer(modifier = Modifier.height(24.dp))
+        Text("Scan and download profile pictures securely.", color = Color.Gray, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(32.dp))
         
         if (!shizukuConnected) {
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF3A0A0A)), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
@@ -341,46 +337,122 @@ fun DPDownloaderScreen() {
                     Text("Shizuku Not Connected", fontWeight = FontWeight.Bold, color = Color.Red)
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = { 
-                        if (Shizuku.pingBinder()) {
-                            ShizukuManager.requestPermission(1001)
-                        } else {
-                            Toast.makeText(context, "Please open Shizuku app first", Toast.LENGTH_LONG).show()
-                            try { context.startActivity(context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")) } catch (e: Exception) { }
-                        }
-                    }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) {
-                        Text("Connect Shizuku")
-                    }
+                        if (Shizuku.pingBinder()) { ShizukuManager.requestPermission(1001) } 
+                        else { Toast.makeText(context, "Open Shizuku app first", Toast.LENGTH_LONG).show() }
+                    }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Connect Shizuku") }
                 }
             }
         }
 
-        OutlinedTextField(value = number, onValueChange = { number = it }, label = { Text("Enter Number (e.g. 923001234567)") }, modifier = Modifier.fillMaxWidth())
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = { 
-            if (number.length > 9) {
-                if (shizukuConnected) {
+        // Web-style search bar
+        OutlinedTextField(
+            value = number, 
+            onValueChange = { number = it }, 
+            label = { Text("Enter WhatsApp Number") }, 
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            shape = RoundedCornerShape(16.dp)
+        )
+        
+        Button(
+            onClick = { 
+                if (number.length > 5 && shizukuConnected) {
+                    isScanning = true
                     val cleanNumber = number.replace("+", "").trim()
-                    val command = "ls /sdcard/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp\\ Profile\\ Photos/ | grep $cleanNumber"
+                    val destPath = "/sdcard/Download/dp_${cleanNumber}.jpg"
+                    val command = "cp /storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp\\ Profile\\ Photos/*${cleanNumber}* $destPath"
+                    
                     val result = ShizukuManager.executeCommand(command)
-                    if (result.trim().isNotEmpty() && !result.contains("Error")) {
-                        Toast.makeText(context, "Profile Picture found!", Toast.LENGTH_SHORT).show()
+                    val file = File(destPath)
+                    
+                    if (file.exists()) {
+                        previewImagePath = destPath
+                        Toast.makeText(context, "DP Found!", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(context, "No DP found for this number", Toast.LENGTH_LONG).show()
+                        val shortNumber = cleanNumber.takeLast(10)
+                        val command2 = "cp /storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp\\ Profile\\ Photos/*${shortNumber}* $destPath"
+                        ShizukuManager.executeCommand(command2)
+                        if (file.exists()) {
+                            previewImagePath = destPath
+                            Toast.makeText(context, "DP Found!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            previewImagePath = null
+                            Toast.makeText(context, "DP not found for this number.", Toast.LENGTH_LONG).show()
+                        }
                     }
-                } else {
-                    Toast.makeText(context, "Connect Shizuku first", Toast.LENGTH_SHORT).show()
+                    isScanning = false
+                } else { Toast.makeText(context, "Connect Shizuku or enter valid number", Toast.LENGTH_SHORT).show() }
+            }, 
+            modifier = Modifier.fillMaxWidth().height(56.dp), 
+            shape = RoundedCornerShape(16.dp),
+            enabled = !isScanning
+        ) { 
+            if (isScanning) { CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp)) } 
+            else { Text("Scan & Download DP", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // 3D Web-style Preview Card
+        previewImagePath?.let { path ->
+            Card(
+                shape = RoundedCornerShape(24.dp), 
+                elevation = CardDefaults.cardElevation(12.dp),
+                modifier = Modifier.fillMaxWidth().wrapContentHeight()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    AsyncImage(
+                        model = File(path),
+                        contentDescription = "DP Preview",
+                        modifier = Modifier.size(180.dp).clip(RoundedCornerShape(16.dp)),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Profile Picture Found!", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Saved automatically to /Download/ folder", color = Color.Green, fontSize = 12.sp)
                 }
-            } else {
-                Toast.makeText(context, "Enter a valid number", Toast.LENGTH_SHORT).show()
             }
-        }, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Download Profile Picture") }
+        }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageCard(notif: NotificationEntity) {
+    val context = LocalContext.current
+    var showSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+
+    if (showSheet) {
+        ModalBottomSheet(onDismissRequest = { showSheet = false }, sheetState = sheetState) {
+            Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                Text("Message Options", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    ActionButton(Icons.Default.ContentCopy, "Copy") {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Message", notif.message))
+                        Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
+                        showSheet = false
+                    }
+                    ActionButton(Icons.Default.Share, "Share") {
+                        val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, notif.message) }
+                        context.startActivity(Intent.createChooser(intent, "Share Message"))
+                        showSheet = false
+                    }
+                    ActionButton(Icons.Default.Delete, "Delete") {
+                        Toast.makeText(context, "Deleted from UI (Mock)", Toast.LENGTH_SHORT).show()
+                        showSheet = false
+                    }
+                }
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp).clickable { showSheet = true },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = if (notif.isDeleted) Color(0xFF3A0A0A) else MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -399,7 +471,18 @@ fun MessageCard(notif: NotificationEntity) {
 }
 
 @Composable
-fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
+fun ActionButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onClick() }) {
+        Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+fun SettingsScreen(currentTheme: WeaveTheme, appLanguage: String, onThemeChange: (WeaveTheme) -> Unit, onLanguageChange: (String) -> Unit) {
     val context = LocalContext.current
     var notifAccess by remember { mutableStateOf(isNotificationAccessGranted(context)) }
     var batteryOpt by remember { mutableStateOf(isBatteryOptimizationDisabled(context)) }
@@ -418,6 +501,15 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
             ThemeChip("Light", WeaveTheme.LIGHT, currentTheme, onThemeChange)
             ThemeChip("Ocean", WeaveTheme.OCEAN, currentTheme, onThemeChange)
             ThemeChip("Sunset", WeaveTheme.SUNSET, currentTheme, onThemeChange)
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+        Text("App Language", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LangChip("English", "EN", appLanguage, onLanguageChange)
+            LangChip("Hindi", "HI", appLanguage, onLanguageChange)
+            LangChip("Urdu", "UR", appLanguage, onLanguageChange)
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -455,11 +547,15 @@ fun SettingsCard(title: String, subTitle: String, icon: ImageVector, subTitleCol
 @Composable
 fun ThemeChip(label: String, theme: WeaveTheme, selectedTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
     val isSelected = theme == selectedTheme
-    Card(
-        modifier = Modifier.clickable { onThemeChange(theme) },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-    ) {
+    Card(modifier = Modifier.clickable { onThemeChange(theme) }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)) {
+        Text(label, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun LangChip(label: String, code: String, selectedLang: String, onLanguageChange: (String) -> Unit) {
+    val isSelected = code == selectedLang
+    Card(modifier = Modifier.clickable { onLanguageChange(code) }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)) {
         Text(label, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
