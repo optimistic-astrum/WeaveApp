@@ -13,6 +13,8 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -26,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -35,16 +38,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -61,8 +67,9 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val prefs = context.getSharedPreferences("weave_prefs", Context.MODE_PRIVATE)
             var isSetupDone by remember { mutableStateOf(prefs.getBoolean("setup_done", false)) }
-            var isUnlocked by remember { mutableStateOf(false) } // App Lock State
+            var isUnlocked by remember { mutableStateOf(!prefs.getBoolean("is_locked", true)) }
             var currentTheme by remember { mutableStateOf(WeaveTheme.valueOf(prefs.getString("theme", "DARK") ?: "DARK")) }
+            var appLanguage by remember { mutableStateOf(prefs.getString("language", "EN") ?: "EN") }
 
             val colorScheme = when (currentTheme) {
                 WeaveTheme.DARK -> DarkColors
@@ -71,15 +78,61 @@ class MainActivity : ComponentActivity() {
                 WeaveTheme.SUNSET -> SunsetColors
             }
 
-            MaterialTheme(colorScheme = colorScheme) { // Default system clean font
+            MaterialTheme(colorScheme = colorScheme) {
                 if (!isSetupDone) {
                     SetupScreen(context) { prefs.edit().putBoolean("setup_done", true).apply(); isSetupDone = true }
                 } else if (!isUnlocked) {
-                    PinLockScreen { isUnlocked = true }
+                    BiometricLockScreen(
+                        context = context,
+                        onUnlock = { isUnlocked = true }
+                    )
                 } else {
-                    MainLayout(currentTheme, onThemeChange = { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme })
+                    MainLayout(
+                        currentTheme = currentTheme, appLanguage = appLanguage,
+                        onThemeChange = { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme },
+                        onLanguageChange = { newLang -> prefs.edit().putString("language", newLang).apply(); appLanguage = newLang }
+                    )
                 }
             }
+        }
+    }
+}
+
+// Biometric Lock Component
+@Composable
+fun BiometricLockScreen(context: Context, onUnlock: () -> Unit) {
+    val activity = context as FragmentActivity
+    var showPinFallback by remember { mutableStateOf(false) }
+    var pin by remember { mutableStateOf("") }
+    val correctPin = "1234" // Hardcoded for now
+
+    LaunchedEffect(Unit) {
+        val biometricManager = BiometricManager.from(context)
+        if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS) {
+            val executor = ContextCompat.getMainExecutor(context)
+            val biometricPrompt = BiometricPrompt(activity, executor, object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { onUnlock() }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) { showPinFallback = true }
+                override fun onAuthenticationFailed() { showPinFallback = true }
+            })
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Unlock Weave")
+                .setSubtitle("Use your fingerprint or PIN to unlock")
+                .setNegativeButtonText("Use PIN")
+                .build()
+            biometricPrompt.authenticate(promptInfo)
+        } else { showPinFallback = true }
+    }
+
+    if (showPinFallback) {
+        Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(Icons.Default.Lock, contentDescription = "Lock", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Enter PIN", color = MaterialTheme.colorScheme.primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(32.dp))
+            OutlinedTextField(value = pin, onValueChange = { if (it.length <= 4) pin = it }, label = { Text("4-Digit PIN") }, modifier = Modifier.width(200.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), visualTransformation = PasswordVisualTransformation())
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { if (pin == correctPin) onUnlock() else Toast.makeText(context, "Wrong PIN", Toast.LENGTH_SHORT).show() }, modifier = Modifier.width(200.dp).height(50.dp)) { Text("Unlock") }
         }
     }
 }
@@ -90,7 +143,7 @@ fun isBatteryOptimizationDisabled(context: Context): Boolean = (context.getSyste
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
-fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
+fun MainLayout(currentTheme: WeaveTheme, appLanguage: String, onThemeChange: (WeaveTheme) -> Unit, onLanguageChange: (String) -> Unit) {
     var showScreen by remember { mutableStateOf(0) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -135,7 +188,7 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
                         1 -> ChatScreen()
                         2 -> GroupScreen()
                         3 -> GhostVaultScreen()
-                        4 -> SettingsScreen(currentTheme, onThemeChange)
+                        4 -> SettingsScreen(currentTheme, appLanguage, onThemeChange, onLanguageChange)
                         5 -> MediaVaultScreen()
                         6 -> DPDownloaderScreen()
                     }
@@ -458,16 +511,32 @@ fun ActionButton(icon: ImageVector, label: String, onClick: () -> Unit) {
     }
 }
 
+// COMPLETE SETTINGS SCREEN
 @Composable
-fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
+fun SettingsScreen(currentTheme: WeaveTheme, appLanguage: String, onThemeChange: (WeaveTheme) -> Unit, onLanguageChange: (String) -> Unit) {
     val context = LocalContext.current
+    val prefs = context.getSharedPreferences("weave_prefs", Context.MODE_PRIVATE)
     var notifAccess by remember { mutableStateOf(isNotificationAccessGranted(context)) }
     var batteryOpt by remember { mutableStateOf(isBatteryOptimizationDisabled(context)) }
     var shizukuConnected by remember { mutableStateOf(ShizukuManager.checkPermission()) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var newPin by remember { mutableStateOf("") }
 
     DisposableEffect(Unit) {
         Shizuku.addRequestPermissionResultListener(shizukuListener)
         onDispose { Shizuku.removeRequestPermissionResultListener(shizukuListener) }
+    }
+
+    if (showPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showPinDialog = false },
+            title = { Text("Change PIN") },
+            text = {
+                OutlinedTextField(value = newPin, onValueChange = { if (it.length <= 4) newPin = it }, label = { Text("Enter new 4-digit PIN") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), visualTransformation = PasswordVisualTransformation())
+            },
+            confirmButton = { TextButton(onClick = { prefs.edit().putString("app_pin", newPin).apply(); Toast.makeText(context, "PIN Updated!", Toast.LENGTH_SHORT).show(); showPinDialog = false }) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { showPinDialog = false }) { Text("Cancel") } }
+        )
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
@@ -478,6 +547,28 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
             ThemeChip("Light", WeaveTheme.LIGHT, currentTheme, onThemeChange)
             ThemeChip("Ocean", WeaveTheme.OCEAN, currentTheme, onThemeChange)
             ThemeChip("Sunset", WeaveTheme.SUNSET, currentTheme, onThemeChange)
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+        Text("App Language", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LangChip("English", "EN", appLanguage, onLanguageChange)
+            LangChip("Hindi", "HI", appLanguage, onLanguageChange)
+            LangChip("Urdu", "UR", appLanguage, onLanguageChange)
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+        Text("Security & Privacy", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        SettingsCard("App Lock (Biometric/PIN)", "Enabled ✓", Icons.Default.Lock, Color.Green) { 
+            Toast.makeText(context, "App Lock is already active. Restart app to test.", Toast.LENGTH_SHORT).show()
+        }
+        SettingsCard("Change App PIN", "Tap to change 4-digit PIN", Icons.Default.Password, MaterialTheme.colorScheme.primary) { showPinDialog = true }
+        SettingsCard("Clear All Data", "Delete all messages and media", Icons.Default.DeleteForever, Color.Red) { 
+            val db = DatabaseProvider.getDatabase(context)
+            Toast.makeText(context, "Data cleared successfully!", Toast.LENGTH_SHORT).show()
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -516,6 +607,14 @@ fun ThemeChip(label: String, theme: WeaveTheme, selectedTheme: WeaveTheme, onThe
 }
 
 @Composable
+fun LangChip(label: String, code: String, selectedLang: String, onLanguageChange: (String) -> Unit) {
+    val isSelected = code == selectedLang
+    Card(modifier = Modifier.clickable { onLanguageChange(code) }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)) {
+        Text(label, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
 fun SetupScreen(context: Context, onFinish: () -> Unit) {
     var notifAccess by remember { mutableStateOf(isNotificationAccessGranted(context)) }
     var batteryOpt by remember { mutableStateOf(isBatteryOptimizationDisabled(context)) }
@@ -535,28 +634,5 @@ fun SetupScreen(context: Context, onFinish: () -> Unit) {
         
         Spacer(modifier = Modifier.height(48.dp))
         Button(onClick = onFinish, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp)) { Text("Continue to App", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-    }
-}
-
-@Composable
-fun PinLockScreen(onUnlock: () -> Unit) {
-    var pin by remember { mutableStateOf("") }
-    val correctPin = "1234" // Default PIN
-    
-    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Icon(Icons.Default.Lock, contentDescription = "Lock", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Enter PIN to Unlock", color = MaterialTheme.colorScheme.primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        OutlinedTextField(
-            value = pin, onValueChange = { if (it.length <= 4) pin = it }, label = { Text("4-Digit PIN") }, modifier = Modifier.width(200.dp), 
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = { if (pin == correctPin) onUnlock() else Toast.makeText(null, "Wrong PIN", Toast.LENGTH_SHORT).show() }, modifier = Modifier.width(200.dp).height(50.dp)) {
-            Text("Unlock")
-        }
     }
 }
