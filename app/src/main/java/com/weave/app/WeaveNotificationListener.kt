@@ -25,12 +25,11 @@ class WeaveNotificationListener : NotificationListenerService() {
                 finalMessage = if (bigText.isNotEmpty()) bigText else text
             }
 
-            // Agar subText hai, matlab ye GROUP hai.
             val senderName = if (subText.isNotEmpty()) "$subText ($title)" else title
 
             if (finalMessage.isNotEmpty() && !finalMessage.contains("END-TO-END")) {
                 val lowerMsg = finalMessage.lowercase()
-                val isDeleteEvent = lowerMsg.contains("message was deleted") || lowerMsg.contains("you deleted this message")
+                val isDeleteEvent = lowerMsg.contains("deleted") || lowerMsg.contains("delete")
 
                 val db = DatabaseProvider.getDatabase(applicationContext)
 

@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import rikka.shizuku.Shizuku
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
             val prefs = context.getSharedPreferences("weave_prefs", Context.MODE_PRIVATE)
             var isSetupDone by remember { mutableStateOf(prefs.getBoolean("setup_done", false)) }
             var currentTheme by remember { mutableStateOf(WeaveTheme.valueOf(prefs.getString("theme", "DARK") ?: "DARK")) }
+            var isCompactDock by remember { mutableStateOf(prefs.getBoolean("compact_dock", false)) }
 
             val colorScheme = when (currentTheme) {
                 WeaveTheme.DARK -> DarkColors
@@ -71,24 +73,25 @@ class MainActivity : ComponentActivity() {
                 if (!isSetupDone) {
                     SetupScreen(context) { prefs.edit().putBoolean("setup_done", true).apply(); isSetupDone = true }
                 } else {
-                    MainLayout(currentTheme) { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme }
+                    MainLayout(currentTheme, isCompactDock, onThemeChange = { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme }, onDockChange = { isCompact -> prefs.edit().putBoolean("compact_dock", isCompact).apply(); isCompactDock = isCompact })
                 }
             }
         }
     }
 }
 
-fun isNotificationAccessGranted(context: Context): Boolean {
-    return androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+val shizukuListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
+    if (grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        ShizukuManager.isGranted = true
+    }
 }
-fun isBatteryOptimizationDisabled(context: Context): Boolean {
-    val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-    return pm.isIgnoringBatteryOptimizations(context.packageName)
-}
+
+fun isNotificationAccessGranted(context: Context): Boolean = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+fun isBatteryOptimizationDisabled(context: Context): Boolean = (context.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(context.packageName)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
-fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
+fun MainLayout(currentTheme: WeaveTheme, isCompactDock: Boolean, onThemeChange: (WeaveTheme) -> Unit, onDockChange: (Boolean) -> Unit) {
     var showScreen by remember { mutableStateOf(0) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -124,7 +127,7 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, titleContentColor = MaterialTheme.colorScheme.primary, navigationIconContentColor = MaterialTheme.colorScheme.primary)
                 )
             },
-            bottomBar = { GlassDock(selectedScreen = showScreen, onScreenSelected = { showScreen = it }) }
+            bottomBar = { GlassDock(selectedScreen = showScreen, isCompact = isCompactDock, onScreenSelected = { showScreen = it }) }
         ) { padding ->
             Box(modifier = Modifier.padding(padding).fillMaxSize()) {
                 AnimatedContent(targetState = showScreen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { target ->
@@ -133,7 +136,7 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
                         1 -> ChatScreen()
                         2 -> GroupScreen()
                         3 -> GhostVaultScreen()
-                        4 -> SettingsScreen(currentTheme, onThemeChange)
+                        4 -> SettingsScreen(currentTheme, isCompactDock, onThemeChange, onDockChange)
                         5 -> MediaVaultScreen()
                         7 -> DPDownloaderScreen()
                     }
@@ -144,34 +147,37 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
 }
 
 @Composable
-fun GlassDock(selectedScreen: Int, onScreenSelected: (Int) -> Unit) {
-    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).navigationBarsPadding(), contentAlignment = Alignment.Center) {
+fun GlassDock(selectedScreen: Int, isCompact: Boolean, onScreenSelected: (Int) -> Unit) {
+    val horizontalPadding = if (isCompact) 40.dp else 16.dp
+    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding, vertical = 8.dp).navigationBarsPadding(), contentAlignment = Alignment.Center) {
         Row(
             modifier = Modifier.shadow(16.dp, RoundedCornerShape(30.dp)).clip(RoundedCornerShape(30.dp))
                 .background(brush = Brush.verticalGradient(colors = listOf(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f), MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))))
                 .border(1.dp, Brush.verticalGradient(colors = listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)), RoundedCornerShape(30.dp))
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(horizontal = if(isCompact) 4.dp else 8.dp, vertical = if(isCompact) 4.dp else 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically
         ) {
-            DockItem(Icons.Default.Home, "Home", selectedScreen == 0) { onScreenSelected(0) }
-            DockItem(Icons.Default.Person, "Chats", selectedScreen == 1) { onScreenSelected(1) }
-            DockItem(Icons.Default.Group, "Groups", selectedScreen == 2) { onScreenSelected(2) }
-            DockItem(Icons.Default.Delete, "Ghost", selectedScreen == 3) { onScreenSelected(3) }
-            DockItem(Icons.Default.Photo, "Media", selectedScreen == 5) { onScreenSelected(5) }
-            DockItem(Icons.Default.Settings, "Settings", selectedScreen == 4) { onScreenSelected(4) }
+            DockItem(Icons.Default.Home, "Home", selectedScreen == 0, isCompact) { onScreenSelected(0) }
+            DockItem(Icons.Default.Person, "Chats", selectedScreen == 1, isCompact) { onScreenSelected(1) }
+            DockItem(Icons.Default.Group, "Groups", selectedScreen == 2, isCompact) { onScreenSelected(2) }
+            DockItem(Icons.Default.Delete, "Ghost", selectedScreen == 3, isCompact) { onScreenSelected(3) }
+            DockItem(Icons.Default.Photo, "Media", selectedScreen == 5, isCompact) { onScreenSelected(5) }
+            DockItem(Icons.Default.Settings, "Settings", selectedScreen == 4, isCompact) { onScreenSelected(4) }
         }
     }
 }
 
 @Composable
-fun DockItem(icon: ImageVector, label: String, isSelected: Boolean, onClick: () -> Unit) {
+fun DockItem(icon: ImageVector, label: String, isSelected: Boolean, isCompact: Boolean, onClick: () -> Unit) {
     val tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     val bg = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
     val scale by animateFloatAsState(if (isSelected) 1.15f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow), label = "bounce")
-    Column(modifier = Modifier.scale(scale).clip(RoundedCornerShape(20.dp)).background(bg).clickable { onClick() }.padding(horizontal = 8.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(label, color = tint, fontSize = 9.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+    Column(modifier = Modifier.scale(scale).clip(RoundedCornerShape(20.dp)).background(bg).clickable { onClick() }.padding(horizontal = if(isCompact) 4.dp else 8.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(if(isCompact) 18.dp else 22.dp))
+        if (!isCompact) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(label, color = tint, fontSize = 9.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+        }
     }
 }
 
@@ -209,7 +215,6 @@ fun ChatScreen() {
     val context = LocalContext.current
     val db = DatabaseProvider.getDatabase(context)
     var chats by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
-    // Individual chats usually don't have (Group Name) format in title
     LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { chats = it.filter { msg -> !msg.sender.contains("(") } } }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(chats) { notif -> MessageCard(notif) } } }
 }
@@ -219,7 +224,6 @@ fun GroupScreen() {
     val context = LocalContext.current
     val db = DatabaseProvider.getDatabase(context)
     var groups by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
-    // Groups have format: "Group Name (Sender)"
     LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { groups = it.filter { msg -> msg.sender.contains("(") } } }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(groups) { notif -> MessageCard(notif) } } }
 }
@@ -229,7 +233,11 @@ fun GhostVaultScreen() {
     val context = LocalContext.current
     val db = DatabaseProvider.getDatabase(context)
     var deletedMessages by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
-    LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { deletedMessages = it.filter { msg -> msg.isDeleted } } }
+    LaunchedEffect(Unit) { 
+        db.notificationDao().getAllNotifications().collectLatest { 
+            deletedMessages = it.filter { msg -> msg.isDeleted || msg.message.contains("deleted", ignoreCase = true) } 
+        } 
+    }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { 
         if (deletedMessages.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No deleted messages recovered yet.", color = Color.Gray) }
@@ -279,30 +287,67 @@ fun MediaVaultScreen() {
 fun DPDownloaderScreen() {
     val context = LocalContext.current
     var number by remember { mutableStateOf("") }
+    var shizukuConnected by remember { mutableStateOf(ShizukuManager.checkPermission()) }
+
+    DisposableEffect(Unit) {
+        Shizuku.addRequestPermissionResultListener(shizukuListener)
+        onDispose { Shizuku.removeRequestPermissionResultListener(shizukuListener) }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("WhatsApp DP Downloader", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text("DP Downloader (Shizuku)", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Requires Shizuku to download Profile Pictures directly.", color = Color.Gray, fontSize = 12.sp)
         Spacer(modifier = Modifier.height(16.dp))
+        
+        if (!shizukuConnected) {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF3A0A0A)), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Shizuku Not Connected", fontWeight = FontWeight.Bold, color = Color.Red)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = { 
+                        if (Shizuku.pingBinder()) {
+                            ShizukuManager.requestPermission(1001)
+                        } else {
+                            Toast.makeText(context, "Please open Shizuku app first", Toast.LENGTH_LONG).show()
+                            try { context.startActivity(context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")) } catch (e: Exception) { }
+                        }
+                    }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) {
+                        Text("Connect Shizuku")
+                    }
+                }
+            }
+        }
+
         OutlinedTextField(value = number, onValueChange = { number = it }, label = { Text("Enter Number (e.g. 923001234567)") }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = { 
             if (number.length > 9) {
-                // Open WhatsApp chat directly to view DP
-                val uri = Uri.parse("https://wa.me/$number")
-                val intent = Intent(Intent.ACTION_VIEW, uri)
-                context.startActivity(intent)
+                if (shizukuConnected) {
+                    val result = ShizukuManager.executeCommand("ls /sdcard/")
+                    Toast.makeText(context, "Shizuku Working: $result", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Connect Shizuku first", Toast.LENGTH_SHORT).show()
+                }
             } else {
-                Toast.makeText(context, "Please enter a valid number", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Enter a valid number", Toast.LENGTH_SHORT).show()
             }
-        }, modifier = Modifier.fillMaxWidth()) { Text("View Profile Picture") }
+        }, modifier = Modifier.fillMaxWidth()) { Text("Download Profile Picture") }
     }
 }
 
 @Composable
-fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
+fun SettingsScreen(currentTheme: WeaveTheme, isCompactDock: Boolean, onThemeChange: (WeaveTheme) -> Unit, onDockChange: (Boolean) -> Unit) {
     val context = LocalContext.current
     var notifAccess by remember { mutableStateOf(isNotificationAccessGranted(context)) }
     var batteryOpt by remember { mutableStateOf(isBatteryOptimizationDisabled(context)) }
+    var shizukuConnected by remember { mutableStateOf(ShizukuManager.checkPermission()) }
     var hapticEnabled by remember { mutableStateOf(true) }
+
+    DisposableEffect(Unit) {
+        Shizuku.addRequestPermissionResultListener(shizukuListener)
+        onDispose { Shizuku.removeRequestPermissionResultListener(shizukuListener) }
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Appearance", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -313,9 +358,19 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
             ThemeChip("Ocean", WeaveTheme.OCEAN, currentTheme, onThemeChange)
             ThemeChip("Sunset", WeaveTheme.SUNSET, currentTheme, onThemeChange)
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Dock Customization", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(8.dp))
+        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), elevation = CardDefaults.cardElevation(4.dp)) {
+            Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Compact Dock (Fit to screen)", fontWeight = FontWeight.Bold)
+                Switch(checked = isCompactDock, onCheckedChange = { onDockChange(it) })
+            }
+        }
         
         Spacer(modifier = Modifier.height(24.dp))
-        Text("Permissions", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Text("Permissions & Pro", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(8.dp))
         
         Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), elevation = CardDefaults.cardElevation(4.dp)) {
@@ -340,6 +395,24 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
             }
         }
 
+        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { 
+            if (Shizuku.pingBinder()) {
+                ShizukuManager.requestPermission(1001)
+            } else {
+                Toast.makeText(context, "Please open Shizuku app first", Toast.LENGTH_LONG).show()
+                try { context.startActivity(context.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")) } catch (e: Exception) { }
+            }
+        }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = if (shizukuConnected) MaterialTheme.colorScheme.surfaceVariant else Color(0xFF3A0A0A)), elevation = CardDefaults.cardElevation(4.dp)) {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Build, contentDescription = null, tint = if(shizukuConnected) MaterialTheme.colorScheme.primary else Color.Red)
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text("Shizuku Pro Mode", fontWeight = FontWeight.Bold, color = if(shizukuConnected) MaterialTheme.colorScheme.onSurface else Color.Red)
+                    Text(if (shizukuConnected) "Connected ✓" else "Tap to Connect", color = if (shizukuConnected) Color.Green else Color.Red, fontSize = 12.sp)
+                }
+            }
+        }
+        
         Spacer(modifier = Modifier.height(24.dp))
         Text("Data Management", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(8.dp))
