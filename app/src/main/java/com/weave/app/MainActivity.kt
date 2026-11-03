@@ -133,7 +133,7 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
             Box(modifier = Modifier.padding(padding).fillMaxSize()) {
                 AnimatedContent(targetState = showScreen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { target ->
                     when (target) {
-                        0 -> HomeScreen()
+                        0 -> DashboardScreen()
                         1 -> ChatScreen()
                         2 -> GroupScreen()
                         3 -> GhostVaultScreen()
@@ -147,82 +147,87 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
     }
 }
 
-// PROFESSIONAL BOTTOM NAVIGATION (Edge to Edge)
 @Composable
 fun BottomNavBar(selectedScreen: Int, onScreenSelected: (Int) -> Unit) {
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 8.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-            label = { Text("Home", fontSize = 10.sp) },
-            selected = selectedScreen == 0,
-            onClick = { onScreenSelected(0) },
-            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Person, contentDescription = "Chats") },
-            label = { Text("Chats", fontSize = 10.sp) },
-            selected = selectedScreen == 1,
-            onClick = { onScreenSelected(1) },
-            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Group, contentDescription = "Groups") },
-            label = { Text("Groups", fontSize = 10.sp) },
-            selected = selectedScreen == 2,
-            onClick = { onScreenSelected(2) },
-            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Delete, contentDescription = "Ghost") },
-            label = { Text("Ghost", fontSize = 10.sp) },
-            selected = selectedScreen == 3,
-            onClick = { onScreenSelected(3) },
-            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-            label = { Text("Settings", fontSize = 10.sp) },
-            selected = selectedScreen == 4,
-            onClick = { onScreenSelected(4) },
-            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-        )
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
+        NavigationBarItem(icon = { Icon(Icons.Default.Home, contentDescription = "Home") }, label = { Text("Home", fontSize = 10.sp) }, selected = selectedScreen == 0, onClick = { onScreenSelected(0) }, colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)))
+        NavigationBarItem(icon = { Icon(Icons.Default.Person, contentDescription = "Chats") }, label = { Text("Chats", fontSize = 10.sp) }, selected = selectedScreen == 1, onClick = { onScreenSelected(1) }, colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)))
+        NavigationBarItem(icon = { Icon(Icons.Default.Group, contentDescription = "Groups") }, label = { Text("Groups", fontSize = 10.sp) }, selected = selectedScreen == 2, onClick = { onScreenSelected(2) }, colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)))
+        NavigationBarItem(icon = { Icon(Icons.Default.Delete, contentDescription = "Ghost") }, label = { Text("Ghost", fontSize = 10.sp) }, selected = selectedScreen == 3, onClick = { onScreenSelected(3) }, colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)))
+        NavigationBarItem(icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") }, label = { Text("Settings", fontSize = 10.sp) }, selected = selectedScreen == 4, onClick = { onScreenSelected(4) }, colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)))
     }
 }
 
 @Composable
 fun DrawerItem(title: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
-    NavigationDrawerItem(
-        label = { Text(title, fontWeight = FontWeight.Medium) }, 
-        icon = { Icon(icon, contentDescription = null) }, 
-        selected = isSelected, 
-        onClick = onClick, 
-        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-    )
+    NavigationDrawerItem(label = { Text(title, fontWeight = FontWeight.Medium) }, icon = { Icon(icon, contentDescription = null) }, selected = isSelected, onClick = onClick, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
 }
 
-// PROFESSIONAL CHAT CARD (With Bottom Sheet Actions)
+// DASHBOARD SCREEN (Naya aur Attractive)
+@Composable
+fun DashboardScreen() {
+    val context = LocalContext.current
+    val db = DatabaseProvider.getDatabase(context)
+    var totalMessages by remember { mutableStateOf(0) }
+    var totalDeleted by remember { mutableStateOf(0) }
+    var recentChats by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
+    LaunchedEffect(Unit) { 
+        db.notificationDao().getAllNotifications().collectLatest { allMsgs -> 
+            totalMessages = allMsgs.size
+            totalDeleted = allMsgs.count { it.isDeleted || it.message.lowercase().contains("delete") }
+            
+            val map = mutableMapOf<String, String>()
+            for (msg in allMsgs) {
+                if (!map.containsKey(msg.sender)) map[msg.sender] = msg.message
+            }
+            recentChats = map
+        } 
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        // Stats Cards (Attractive Look)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Total Messages", fontSize = 12.sp, color = Color.Gray)
+                    Text("$totalMessages", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color(0xFF3A0A0A)), shape = RoundedCornerShape(16.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Deleted", fontSize = 12.sp, color = Color.Gray)
+                    Text("$totalDeleted", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.Red)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Recent Chats", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        LazyColumn { 
+            items(recentChats.toList().take(5)) { (sender, lastMsg) -> 
+                ContactChatCard(sender, lastMsg) {
+                    val intent = Intent(context, ChatDetailActivity::class.java)
+                    intent.putExtra("contact_name", sender)
+                    context.startActivity(intent)
+                }
+            } 
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactChatCard(senderName: String, lastMessage: String, onClick: () -> Unit) {
-    var showBottomSheet by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState()
-
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clickable { onClick() },
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            // Avatar
-            Box(
-                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
                 Text(senderName.take(1).uppercase(), color = MaterialTheme.colorScheme.primary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.width(16.dp))
@@ -235,46 +240,20 @@ fun ContactChatCard(senderName: String, lastMessage: String, onClick: () -> Unit
     }
 }
 
-// HOME SCREEN (List of Contacts)
-@Composable
-fun HomeScreen() {
-    val context = LocalContext.current
-    val db = DatabaseProvider.getDatabase(context)
-    var groupedChats by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-
-    LaunchedEffect(Unit) { 
-        db.notificationDao().getAllNotifications().collectLatest { allMsgs -> 
-            // Group by sender and get last message
-            val map = mutableMapOf<String, String>()
-            for (msg in allMsgs) {
-                if (!map.containsKey(msg.sender)) {
-                    map[msg.sender] = msg.message
-                }
-            }
-            groupedChats = map
-        } 
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(vertical = 8.dp)) { 
-        LazyColumn { 
-            items(groupedChats.toList()) { (sender, lastMsg) -> 
-                ContactChatCard(sender, lastMsg) {
-                    val intent = Intent(context, ChatDetailActivity::class.java)
-                    intent.putExtra("contact_name", sender)
-                    context.startActivity(intent)
-                }
-            } 
-        } 
-    }
-}
-
 @Composable
 fun ChatScreen() {
     val context = LocalContext.current
     val db = DatabaseProvider.getDatabase(context)
     var chats by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
-    LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { chats = it.filter { msg -> !msg.sender.contains("(") } } }
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(chats) { notif -> MessageCard(notif) } } }
+    // Contact wise filter (avoid duplicates on same screen)
+    LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { allMsgs -> chats = allMsgs.filter { msg -> !msg.sender.contains("(") }.distinctBy { it.sender } } }
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(chats) { notif -> 
+        ContactChatCard(notif.sender, notif.message) {
+            val intent = Intent(context, ChatDetailActivity::class.java)
+            intent.putExtra("contact_name", notif.sender)
+            context.startActivity(intent)
+        }
+    } } }
 }
 
 @Composable
@@ -282,8 +261,14 @@ fun GroupScreen() {
     val context = LocalContext.current
     val db = DatabaseProvider.getDatabase(context)
     var groups by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
-    LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { groups = it.filter { msg -> msg.sender.contains("(") } } }
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(groups) { notif -> MessageCard(notif) } } }
+    LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { allMsgs -> groups = allMsgs.filter { msg -> msg.sender.contains("(") }.distinctBy { it.sender } } }
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(groups) { notif -> 
+        ContactChatCard(notif.sender, notif.message) {
+            val intent = Intent(context, ChatDetailActivity::class.java)
+            intent.putExtra("contact_name", notif.sender)
+            context.startActivity(intent)
+        }
+    } } }
 }
 
 @Composable
@@ -295,7 +280,7 @@ fun GhostVaultScreen() {
     LaunchedEffect(Unit) { 
         db.notificationDao().getAllNotifications().collectLatest { allMsgs -> 
             deletedMessages = allMsgs.filter { msg -> 
-                msg.isDeleted || msg.message.lowercase().contains("delete") || msg.message.lowercase().contains("deleted")
+                msg.isDeleted || msg.message.lowercase().contains("deleted") 
             } 
         } 
     }
@@ -325,13 +310,7 @@ fun MediaVaultScreen() {
             LazyVerticalGrid(columns = GridCells.Fixed(3), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(files) { file ->
                     Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.aspectRatio(1f).clickable { }) {
-                        // REAL IMAGE LOADING WITH COIL
-                        AsyncImage(
-                            model = file,
-                            contentDescription = "Captured Media",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                        )
+                        AsyncImage(model = file, contentDescription = "Captured Media", modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
                     }
                 }
             }

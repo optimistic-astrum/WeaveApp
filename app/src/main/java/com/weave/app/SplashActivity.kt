@@ -28,15 +28,16 @@ class SplashActivity : ComponentActivity() {
             
             LaunchedEffect(Unit) {
                 visible = true
-                delay(2000)
+                delay(1500)
                 startActivity(Intent(this@SplashActivity, MainActivity::class.java))
                 finish()
             }
-            Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0A0A0A)), contentAlignment = Alignment.Center) {
+            // Golden Cream Background
+            Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFFF8E1)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("WEAVE", color = Color(0xFF00E5FF), fontSize = 48.sp, fontWeight = FontWeight.Bold, modifier = Modifier.scale(scale).alpha(alpha))
+                    Text("WEAVE", color = Color(0xFFFFB300), fontSize = 52.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.scale(scale).alpha(alpha))
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Developed by Arif Ali", color = Color.Gray, fontSize = 14.sp, modifier = Modifier.alpha(alpha))
+                    Text("Developed by Arif Ali", color = Color(0xFF8D6E63), fontSize = 14.sp, modifier = Modifier.alpha(alpha))
                 }
             }
         }

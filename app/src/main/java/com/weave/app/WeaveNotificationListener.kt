@@ -29,6 +29,8 @@ class WeaveNotificationListener : NotificationListenerService() {
 
             if (finalMessage.isNotEmpty() && !finalMessage.contains("END-TO-END")) {
                 val lowerMsg = finalMessage.lowercase()
+                
+                // SMART LOGIC: Agar "deleted" word aata hai, toh sirf us sender ka last message mark karo
                 val isDeleteEvent = lowerMsg.contains("deleted") || lowerMsg.contains("delete")
 
                 val db = DatabaseProvider.getDatabase(applicationContext)

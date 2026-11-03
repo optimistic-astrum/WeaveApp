@@ -3,20 +3,29 @@ package com.weave.app
 import androidx.compose.material3.*
 import androidx.compose.ui.graphics.Color
 
-enum class WeaveTheme {
-    DARK, LIGHT, OCEAN, SUNSET
-}
+enum class WeaveTheme { DARK, LIGHT, OCEAN, SUNSET }
 
+// Primary color changed to Royal Gold
 val DarkColors = darkColorScheme(
-    primary = Color(0xFF00E5FF), secondary = Color(0xFF7C4DFF),
-    background = Color(0xFF0A0A0A), surface = Color(0xFF1A1A1A), surfaceVariant = Color(0xFF2A2A2A),
-    onBackground = Color.White, onSurface = Color(0xFFE0E0E0), onSurfaceVariant = Color(0xFFB0B0B0)
+    primary = Color(0xFFFFD700), // Gold
+    secondary = Color(0xFFFFB300), // Darker Gold
+    background = Color(0xFF121212), // Deep Black/Grey
+    surface = Color(0xFF1E1E1E), 
+    surfaceVariant = Color(0xFF2A2A2A),
+    onBackground = Color.White, 
+    onSurface = Color(0xFFE0E0E0), 
+    onSurfaceVariant = Color(0xFFB0B0B0)
 )
 
 val LightColors = lightColorScheme(
-    primary = Color(0xFF1565C0), secondary = Color(0xFF6A1B9A),
-    background = Color(0xFFFAFAFA), surface = Color(0xFFFFFFFF), surfaceVariant = Color(0xFFF0F0F0),
-    onBackground = Color.Black, onSurface = Color(0xFF2A2A2A), onSurfaceVariant = Color(0xFF6A6A6A)
+    primary = Color(0xFFFFB300), 
+    secondary = Color(0xFFFFD700),
+    background = Color(0xFFFFF8E1), // Cream
+    surface = Color.White, 
+    surfaceVariant = Color(0xFFFFECB3),
+    onBackground = Color.Black, 
+    onSurface = Color(0xFF2A2A2A), 
+    onSurfaceVariant = Color(0xFF6A6A6A)
 )
 
 val OceanColors = darkColorScheme(
