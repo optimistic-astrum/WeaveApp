@@ -13,12 +13,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.biometric.BiometricManager
-import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -49,8 +45,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -67,72 +61,21 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val prefs = context.getSharedPreferences("weave_prefs", Context.MODE_PRIVATE)
             var isSetupDone by remember { mutableStateOf(prefs.getBoolean("setup_done", false)) }
-            var isUnlocked by remember { mutableStateOf(!prefs.getBoolean("is_locked", true)) }
-            var currentTheme by remember { mutableStateOf(WeaveTheme.valueOf(prefs.getString("theme", "DARK") ?: "DARK")) }
-            var appLanguage by remember { mutableStateOf(prefs.getString("language", "EN") ?: "EN") }
+            var isLocked by remember { mutableStateOf(prefs.getBoolean("is_locked", false)) }
+            var currentTheme by remember { mutableStateOf(WeaveTheme.valueOf(prefs.getString("theme", "GOLDEN") ?: "GOLDEN")) }
 
-            val colorScheme = when (currentTheme) {
-                WeaveTheme.DARK -> DarkColors
-                WeaveTheme.LIGHT -> LightColors
-                WeaveTheme.OCEAN -> OceanColors
-                WeaveTheme.SUNSET -> SunsetColors
-            }
-
-            MaterialTheme(colorScheme = colorScheme) {
+            MaterialTheme(colorScheme = getThemeColors(currentTheme)) {
                 if (!isSetupDone) {
                     SetupScreen(context) { prefs.edit().putBoolean("setup_done", true).apply(); isSetupDone = true }
-                } else if (!isUnlocked) {
-                    BiometricLockScreen(
-                        context = context,
-                        onUnlock = { isUnlocked = true }
+                } else if (isLocked) {
+                    LockScreen(
+                        onUnlock = { isLocked = false },
+                        currentPin = prefs.getString("app_pin", "1234") ?: "1234"
                     )
                 } else {
-                    MainLayout(
-                        currentTheme = currentTheme, appLanguage = appLanguage,
-                        onThemeChange = { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme },
-                        onLanguageChange = { newLang -> prefs.edit().putString("language", newLang).apply(); appLanguage = newLang }
-                    )
+                    MainLayout(currentTheme, onThemeChange = { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme })
                 }
             }
-        }
-    }
-}
-
-// Biometric Lock Component
-@Composable
-fun BiometricLockScreen(context: Context, onUnlock: () -> Unit) {
-    val activity = context as FragmentActivity
-    var showPinFallback by remember { mutableStateOf(false) }
-    var pin by remember { mutableStateOf("") }
-    val correctPin = "1234" // Hardcoded for now
-
-    LaunchedEffect(Unit) {
-        val biometricManager = BiometricManager.from(context)
-        if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS) {
-            val executor = ContextCompat.getMainExecutor(context)
-            val biometricPrompt = BiometricPrompt(activity, executor, object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { onUnlock() }
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) { showPinFallback = true }
-                override fun onAuthenticationFailed() { showPinFallback = true }
-            })
-            val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Unlock Weave")
-                .setSubtitle("Use your fingerprint or PIN to unlock")
-                .setNegativeButtonText("Use PIN")
-                .build()
-            biometricPrompt.authenticate(promptInfo)
-        } else { showPinFallback = true }
-    }
-
-    if (showPinFallback) {
-        Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Icon(Icons.Default.Lock, contentDescription = "Lock", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("Enter PIN", color = MaterialTheme.colorScheme.primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(32.dp))
-            OutlinedTextField(value = pin, onValueChange = { if (it.length <= 4) pin = it }, label = { Text("4-Digit PIN") }, modifier = Modifier.width(200.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), visualTransformation = PasswordVisualTransformation())
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { if (pin == correctPin) onUnlock() else Toast.makeText(context, "Wrong PIN", Toast.LENGTH_SHORT).show() }, modifier = Modifier.width(200.dp).height(50.dp)) { Text("Unlock") }
         }
     }
 }
@@ -143,8 +86,8 @@ fun isBatteryOptimizationDisabled(context: Context): Boolean = (context.getSyste
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
-fun MainLayout(currentTheme: WeaveTheme, appLanguage: String, onThemeChange: (WeaveTheme) -> Unit, onLanguageChange: (String) -> Unit) {
-    var showScreen by remember { mutableStateOf(0) }
+fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
+    var showScreen by remember { mutableStateOf(0) } // 0=Home, 1=Chats, 2=Groups, 3=Ghost, 4=Settings, 5=Media, 6=DP
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     BackHandler(enabled = showScreen != 0) { showScreen = 0 }
@@ -188,7 +131,7 @@ fun MainLayout(currentTheme: WeaveTheme, appLanguage: String, onThemeChange: (We
                         1 -> ChatScreen()
                         2 -> GroupScreen()
                         3 -> GhostVaultScreen()
-                        4 -> SettingsScreen(currentTheme, appLanguage, onThemeChange, onLanguageChange)
+                        4 -> SettingsScreen(currentTheme, onThemeChange)
                         5 -> MediaVaultScreen()
                         6 -> DPDownloaderScreen()
                     }
@@ -214,6 +157,7 @@ fun DrawerItem(title: String, icon: ImageVector, isSelected: Boolean, onClick: (
     NavigationDrawerItem(label = { Text(title, fontWeight = FontWeight.Medium) }, icon = { Icon(icon, contentDescription = null) }, selected = isSelected, onClick = onClick, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
 }
 
+// DASHBOARD SCREEN (Premium Look)
 @Composable
 fun DashboardScreen() {
     val context = LocalContext.current
@@ -232,11 +176,12 @@ fun DashboardScreen() {
         } 
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+        // Stats Cards
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Total Messages", fontSize = 12.sp, color = Color.Gray)
+                    Text("Total Messages", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("$totalMessages", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 }
             }
@@ -248,6 +193,17 @@ fun DashboardScreen() {
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
+        
+        // Quick Actions
+        Text("Quick Actions", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            QuickActionCard("DP Download", Icons.Default.Download) { Toast.makeText(context, "Open DP from menu", Toast.LENGTH_SHORT).show() }
+            QuickActionCard("Ghost Vault", Icons.Default.Delete) { Toast.makeText(context, "Open Ghost from menu", Toast.LENGTH_SHORT).show() }
+            QuickActionCard("Media", Icons.Default.Photo) { Toast.makeText(context, "Open Media from menu", Toast.LENGTH_SHORT).show() }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
         Text("Recent Chats", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
         Spacer(modifier = Modifier.height(8.dp))
         
@@ -256,15 +212,24 @@ fun DashboardScreen() {
                 Text("No messages yet.\nWaiting for new notifications...", textAlign = TextAlign.Center, color = Color.Gray)
             }
         } else {
-            LazyColumn { 
-                items(recentChats.toList().take(3)) { (sender, lastMsg) -> 
-                    ContactChatCard(sender, lastMsg) {
-                        val intent = Intent(context, ChatDetailActivity::class.java)
-                        intent.putExtra("contact_name", sender)
-                        context.startActivity(intent)
-                    }
-                } 
+            recentChats.toList().take(3).forEach { (sender, lastMsg) ->
+                ContactChatCard(sender, lastMsg) {
+                    val intent = Intent(context, ChatDetailActivity::class.java)
+                    intent.putExtra("contact_name", sender)
+                    context.startActivity(intent)
+                }
             }
+        }
+    }
+}
+
+@Composable
+fun QuickActionCard(title: String, icon: ImageVector, onClick: () -> Unit) {
+    Card(modifier = Modifier.width(100.dp).clickable { onClick() }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = title, tint = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(title, fontSize = 12.sp, textAlign = TextAlign.Center)
         }
     }
 }
@@ -286,12 +251,13 @@ fun ContactChatCard(senderName: String, lastMessage: String, onClick: () -> Unit
             Column(modifier = Modifier.weight(1f)) {
                 Text(senderName, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(lastMessage, color = Color.Gray, fontSize = 14.sp, maxLines = 1)
+                Text(lastMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, maxLines = 1)
             }
         }
     }
 }
 
+// CHAT SCREEN (With Search)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen() {
@@ -343,7 +309,7 @@ fun GhostVaultScreen() {
     LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { allMsgs -> deletedMessages = allMsgs.filter { msg -> msg.isDeleted || msg.message.lowercase().contains("deleted") } } }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { 
         if (deletedMessages.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No deleted messages recovered yet.", color = Color.Gray) }
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No deleted messages recovered yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             LazyColumn { items(deletedMessages) { notif -> MessageCard(notif) } } 
         }
@@ -361,7 +327,7 @@ fun MediaVaultScreen() {
         Text("Media Vault (Recovered)", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(modifier = Modifier.height(16.dp))
         if (files.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No media captured yet.", color = Color.Gray) }
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No media captured yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             LazyVerticalGrid(columns = GridCells.Fixed(3), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(files) { file ->
@@ -390,7 +356,7 @@ fun DPDownloaderScreen() {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("DP Scanner", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 28.sp)
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Scan and download profile pictures securely.", color = Color.Gray, fontSize = 14.sp)
+        Text("Scan and download profile pictures securely.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         Spacer(modifier = Modifier.height(32.dp))
         
         if (!shizukuConnected) {
@@ -433,7 +399,7 @@ fun DPDownloaderScreen() {
             }, 
             modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp), enabled = !isScanning
         ) { 
-            if (isScanning) { CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp)) } 
+            if (isScanning) { CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp)) } 
             else { Text("Scan & Download DP", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
         }
 
@@ -511,9 +477,9 @@ fun ActionButton(icon: ImageVector, label: String, onClick: () -> Unit) {
     }
 }
 
-// COMPLETE SETTINGS SCREEN
+// SETTINGS SCREEN (With 10 Themes, Pin, Legal Pages)
 @Composable
-fun SettingsScreen(currentTheme: WeaveTheme, appLanguage: String, onThemeChange: (WeaveTheme) -> Unit, onLanguageChange: (String) -> Unit) {
+fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("weave_prefs", Context.MODE_PRIVATE)
     var notifAccess by remember { mutableStateOf(isNotificationAccessGranted(context)) }
@@ -521,6 +487,9 @@ fun SettingsScreen(currentTheme: WeaveTheme, appLanguage: String, onThemeChange:
     var shizukuConnected by remember { mutableStateOf(ShizukuManager.checkPermission()) }
     var showPinDialog by remember { mutableStateOf(false) }
     var newPin by remember { mutableStateOf("") }
+    var showTerms by remember { mutableStateOf(false) }
+    var showPrivacy by remember { mutableStateOf(false) }
+    var showFaq by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         Shizuku.addRequestPermissionResultListener(shizukuListener)
@@ -539,40 +508,34 @@ fun SettingsScreen(currentTheme: WeaveTheme, appLanguage: String, onThemeChange:
         )
     }
 
+    if (showTerms) { InfoDialog("Terms & Conditions", "1. Personal Use Only.\n2. No data is uploaded to any server.\n3. Developer is not responsible for misuse.", onClose = { showTerms = false }) }
+    if (showPrivacy) { InfoDialog("Privacy Policy", "1. All data is stored locally on your device.\n2. We do not collect any personal information.\n3. Permissions are used only for app functionality.", onClose = { showPrivacy = false }) }
+    if (showFaq) { InfoDialog("FAQ", "Q: Why messages not capturing?\nA: Check Notification Access.\n\nQ: Why DP not downloading?\nA: Ensure Shizuku is running.\n\nQ: Where is data stored?\nA: Locally on your phone.", onClose = { showFaq = false }) }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Appearance", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
+        Text("Appearance (Themes)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
         Spacer(modifier = Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThemeChip("Dark", WeaveTheme.DARK, currentTheme, onThemeChange)
-            ThemeChip("Light", WeaveTheme.LIGHT, currentTheme, onThemeChange)
-            ThemeChip("Ocean", WeaveTheme.OCEAN, currentTheme, onThemeChange)
-            ThemeChip("Sunset", WeaveTheme.SUNSET, currentTheme, onThemeChange)
+        
+        // 2-Column Theme Grid
+        LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.height(300.dp)) {
+            items(WeaveTheme.values()) { theme ->
+                ThemeCard(theme, currentTheme, onThemeChange)
+            }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("App Language", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LangChip("English", "EN", appLanguage, onLanguageChange)
-            LangChip("Hindi", "HI", appLanguage, onLanguageChange)
-            LangChip("Urdu", "UR", appLanguage, onLanguageChange)
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         Text("Security & Privacy", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
         Spacer(modifier = Modifier.height(12.dp))
         
-        SettingsCard("App Lock (Biometric/PIN)", "Enabled ✓", Icons.Default.Lock, Color.Green) { 
-            Toast.makeText(context, "App Lock is already active. Restart app to test.", Toast.LENGTH_SHORT).show()
+        SettingsCard("App Lock", if (prefs.getBoolean("is_locked", false)) "Enabled ✓" else "Disabled", Icons.Default.Lock, if(prefs.getBoolean("is_locked", false)) Color.Green else Color.Red) { 
+            val current = prefs.getBoolean("is_locked", false)
+            prefs.edit().putBoolean("is_locked", !current).apply()
+            Toast.makeText(context, "Lock status changed. Restart app to apply.", Toast.LENGTH_SHORT).show()
         }
         SettingsCard("Change App PIN", "Tap to change 4-digit PIN", Icons.Default.Password, MaterialTheme.colorScheme.primary) { showPinDialog = true }
-        SettingsCard("Clear All Data", "Delete all messages and media", Icons.Default.DeleteForever, Color.Red) { 
-            val db = DatabaseProvider.getDatabase(context)
-            Toast.makeText(context, "Data cleared successfully!", Toast.LENGTH_SHORT).show()
-        }
 
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("Permissions & Pro", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Permissions", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
         Spacer(modifier = Modifier.height(12.dp))
         
         SettingsCard("Notification Access", if (notifAccess) "Granted ✓" else "Tap to Grant", Icons.Default.Notifications, if(notifAccess) Color.Green else Color.Red) { 
@@ -584,7 +547,41 @@ fun SettingsScreen(currentTheme: WeaveTheme, appLanguage: String, onThemeChange:
         SettingsCard("Shizuku Pro Mode", if (shizukuConnected) "Connected ✓" else "Tap to Connect", Icons.Default.Build, if(shizukuConnected) Color.Green else Color.Red) { 
             if (Shizuku.pingBinder()) { ShizukuManager.requestPermission(1001) } else { Toast.makeText(context, "Open Shizuku app first", Toast.LENGTH_LONG).show() }
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Legal & Info", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        SettingsCard("Terms & Conditions", "Read our terms", Icons.Default.Info, MaterialTheme.colorScheme.onSurfaceVariant) { showTerms = true }
+        SettingsCard("Privacy Policy", "How we handle your data", Icons.Default.PrivacyTip, MaterialTheme.colorScheme.onSurfaceVariant) { showPrivacy = true }
+        SettingsCard("FAQ", "Common questions", Icons.Default.QuestionAnswer, MaterialTheme.colorScheme.onSurfaceVariant) { showFaq = true }
     }
+}
+
+@Composable
+fun ThemeCard(theme: WeaveTheme, currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
+    val isSelected = theme == currentTheme
+    Card(
+        modifier = Modifier.clickable { onThemeChange(theme) },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(getThemeColors(theme).primary))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(theme.name.lowercase().replaceFirstChar { it.uppercase() }, color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+@Composable
+fun InfoDialog(title: String, content: String, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = { Text(content, fontSize = 14.sp) },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } }
+    )
 }
 
 @Composable
@@ -599,18 +596,16 @@ fun SettingsCard(title: String, subTitle: String, icon: ImageVector, subTitleCol
 }
 
 @Composable
-fun ThemeChip(label: String, theme: WeaveTheme, selectedTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
-    val isSelected = theme == selectedTheme
-    Card(modifier = Modifier.clickable { onThemeChange(theme) }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)) {
-        Text(label, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-fun LangChip(label: String, code: String, selectedLang: String, onLanguageChange: (String) -> Unit) {
-    val isSelected = code == selectedLang
-    Card(modifier = Modifier.clickable { onLanguageChange(code) }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)) {
-        Text(label, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+fun LockScreen(onUnlock: () -> Unit, currentPin: String) {
+    var pin by remember { mutableStateOf("") }
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Icon(Icons.Default.Lock, contentDescription = "Lock", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Enter PIN", color = MaterialTheme.colorScheme.primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(32.dp))
+        OutlinedTextField(value = pin, onValueChange = { if (it.length <= 4) pin = it }, label = { Text("4-Digit PIN") }, modifier = Modifier.width(200.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), visualTransformation = PasswordVisualTransformation())
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = { if (pin == currentPin) onUnlock() else { Toast.makeText(null, "Wrong PIN", Toast.LENGTH_SHORT).show(); pin = "" } }, modifier = Modifier.width(200.dp).height(50.dp)) { Text("Unlock") }
     }
 }
 
@@ -621,7 +616,7 @@ fun SetupScreen(context: Context, onFinish: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text("Welcome to WEAVE PRO", color = MaterialTheme.colorScheme.primary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(32.dp))
-        Text("Setup your app for 100% working", color = Color.Gray, fontSize = 16.sp)
+        Text("Setup your app for 100% working", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
         Spacer(modifier = Modifier.height(48.dp))
         
         Button(onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = if (notifAccess) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary)) {
