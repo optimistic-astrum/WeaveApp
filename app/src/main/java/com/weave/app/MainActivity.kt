@@ -15,7 +15,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.background
+import androidx.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -68,10 +68,7 @@ class MainActivity : ComponentActivity() {
                 if (!isSetupDone) {
                     SetupScreen(context) { prefs.edit().putBoolean("setup_done", true).apply(); isSetupDone = true }
                 } else if (isLocked) {
-                    LockScreen(
-                        onUnlock = { isLocked = false },
-                        currentPin = prefs.getString("app_pin", "1234") ?: "1234"
-                    )
+                    LockScreen(onUnlock = { isLocked = false }, currentPin = prefs.getString("app_pin", "1234") ?: "1234")
                 } else {
                     MainLayout(currentTheme, onThemeChange = { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme })
                 }
@@ -87,7 +84,7 @@ fun isBatteryOptimizationDisabled(context: Context): Boolean = (context.getSyste
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
-    var showScreen by remember { mutableStateOf(0) } // 0=Home, 1=Chats, 2=Groups, 3=Ghost, 4=Settings, 5=Media, 6=DP
+    var showScreen by remember { mutableStateOf(0) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     BackHandler(enabled = showScreen != 0) { showScreen = 0 }
@@ -157,7 +154,6 @@ fun DrawerItem(title: String, icon: ImageVector, isSelected: Boolean, onClick: (
     NavigationDrawerItem(label = { Text(title, fontWeight = FontWeight.Medium) }, icon = { Icon(icon, contentDescription = null) }, selected = isSelected, onClick = onClick, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
 }
 
-// DASHBOARD SCREEN (Premium Look)
 @Composable
 fun DashboardScreen() {
     val context = LocalContext.current
@@ -177,7 +173,6 @@ fun DashboardScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        // Stats Cards
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -192,17 +187,6 @@ fun DashboardScreen() {
                 }
             }
         }
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        // Quick Actions
-        Text("Quick Actions", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            QuickActionCard("DP Download", Icons.Default.Download) { Toast.makeText(context, "Open DP from menu", Toast.LENGTH_SHORT).show() }
-            QuickActionCard("Ghost Vault", Icons.Default.Delete) { Toast.makeText(context, "Open Ghost from menu", Toast.LENGTH_SHORT).show() }
-            QuickActionCard("Media", Icons.Default.Photo) { Toast.makeText(context, "Open Media from menu", Toast.LENGTH_SHORT).show() }
-        }
-
         Spacer(modifier = Modifier.height(24.dp))
         Text("Recent Chats", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
         Spacer(modifier = Modifier.height(8.dp))
@@ -219,17 +203,6 @@ fun DashboardScreen() {
                     context.startActivity(intent)
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun QuickActionCard(title: String, icon: ImageVector, onClick: () -> Unit) {
-    Card(modifier = Modifier.width(100.dp).clickable { onClick() }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, contentDescription = title, tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(title, fontSize = 12.sp, textAlign = TextAlign.Center)
         }
     }
 }
@@ -257,7 +230,6 @@ fun ContactChatCard(senderName: String, lastMessage: String, onClick: () -> Unit
     }
 }
 
-// CHAT SCREEN (With Search)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen() {
@@ -477,7 +449,6 @@ fun ActionButton(icon: ImageVector, label: String, onClick: () -> Unit) {
     }
 }
 
-// SETTINGS SCREEN (With 10 Themes, Pin, Legal Pages)
 @Composable
 fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
     val context = LocalContext.current
@@ -500,9 +471,7 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
         AlertDialog(
             onDismissRequest = { showPinDialog = false },
             title = { Text("Change PIN") },
-            text = {
-                OutlinedTextField(value = newPin, onValueChange = { if (it.length <= 4) newPin = it }, label = { Text("Enter new 4-digit PIN") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), visualTransformation = PasswordVisualTransformation())
-            },
+            text = { OutlinedTextField(value = newPin, onValueChange = { if (it.length <= 4) newPin = it }, label = { Text("Enter new 4-digit PIN") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), visualTransformation = PasswordVisualTransformation()) },
             confirmButton = { TextButton(onClick = { prefs.edit().putString("app_pin", newPin).apply(); Toast.makeText(context, "PIN Updated!", Toast.LENGTH_SHORT).show(); showPinDialog = false }) { Text("Save") } },
             dismissButton = { TextButton(onClick = { showPinDialog = false }) { Text("Cancel") } }
         )
@@ -516,11 +485,8 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
         Text("Appearance (Themes)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
         Spacer(modifier = Modifier.height(12.dp))
         
-        // 2-Column Theme Grid
         LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.height(300.dp)) {
-            items(WeaveTheme.values()) { theme ->
-                ThemeCard(theme, currentTheme, onThemeChange)
-            }
+            items(WeaveTheme.values()) { theme -> ThemeCard(theme, currentTheme, onThemeChange) }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -528,9 +494,7 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
         Spacer(modifier = Modifier.height(12.dp))
         
         SettingsCard("App Lock", if (prefs.getBoolean("is_locked", false)) "Enabled ✓" else "Disabled", Icons.Default.Lock, if(prefs.getBoolean("is_locked", false)) Color.Green else Color.Red) { 
-            val current = prefs.getBoolean("is_locked", false)
-            prefs.edit().putBoolean("is_locked", !current).apply()
-            Toast.makeText(context, "Lock status changed. Restart app to apply.", Toast.LENGTH_SHORT).show()
+            val current = prefs.getBoolean("is_locked", false); prefs.edit().putBoolean("is_locked", !current).apply(); Toast.makeText(context, "Lock status changed. Restart app to apply.", Toast.LENGTH_SHORT).show()
         }
         SettingsCard("Change App PIN", "Tap to change 4-digit PIN", Icons.Default.Password, MaterialTheme.colorScheme.primary) { showPinDialog = true }
 
@@ -538,15 +502,9 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
         Text("Permissions", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
         Spacer(modifier = Modifier.height(12.dp))
         
-        SettingsCard("Notification Access", if (notifAccess) "Granted ✓" else "Tap to Grant", Icons.Default.Notifications, if(notifAccess) Color.Green else Color.Red) { 
-            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) 
-        }
-        SettingsCard("Battery Optimization", if (batteryOpt) "Disabled ✓" else "Tap to Disable", Icons.Default.BatteryFull, if(batteryOpt) Color.Green else Color.Red) { 
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS); intent.data = Uri.parse("package:${context.packageName}"); context.startActivity(intent) 
-        }
-        SettingsCard("Shizuku Pro Mode", if (shizukuConnected) "Connected ✓" else "Tap to Connect", Icons.Default.Build, if(shizukuConnected) Color.Green else Color.Red) { 
-            if (Shizuku.pingBinder()) { ShizukuManager.requestPermission(1001) } else { Toast.makeText(context, "Open Shizuku app first", Toast.LENGTH_LONG).show() }
-        }
+        SettingsCard("Notification Access", if (notifAccess) "Granted ✓" else "Tap to Grant", Icons.Default.Notifications, if(notifAccess) Color.Green else Color.Red) { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        SettingsCard("Battery Optimization", if (batteryOpt) "Disabled ✓" else "Tap to Disable", Icons.Default.BatteryFull, if(batteryOpt) Color.Green else Color.Red) { val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS); intent.data = Uri.parse("package:${context.packageName}"); context.startActivity(intent) }
+        SettingsCard("Shizuku Pro Mode", if (shizukuConnected) "Connected ✓" else "Tap to Connect", Icons.Default.Build, if(shizukuConnected) Color.Green else Color.Red) { if (Shizuku.pingBinder()) { ShizukuManager.requestPermission(1001) } else { Toast.makeText(context, "Open Shizuku app first", Toast.LENGTH_LONG).show() } }
 
         Spacer(modifier = Modifier.height(24.dp))
         Text("Legal & Info", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
@@ -561,11 +519,7 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
 @Composable
 fun ThemeCard(theme: WeaveTheme, currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
     val isSelected = theme == currentTheme
-    Card(
-        modifier = Modifier.clickable { onThemeChange(theme) },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-    ) {
+    Card(modifier = Modifier.clickable { onThemeChange(theme) }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(getThemeColors(theme).primary))
             Spacer(modifier = Modifier.width(8.dp))
@@ -576,12 +530,7 @@ fun ThemeCard(theme: WeaveTheme, currentTheme: WeaveTheme, onThemeChange: (Weave
 
 @Composable
 fun InfoDialog(title: String, content: String, onClose: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text(title, fontWeight = FontWeight.Bold) },
-        text = { Text(content, fontSize = 14.sp) },
-        confirmButton = { TextButton(onClick = onClose) { Text("Close") } }
-    )
+    AlertDialog(onDismissRequest = onClose, title = { Text(title, fontWeight = FontWeight.Bold) }, text = { Text(content, fontSize = 14.sp) }, confirmButton = { TextButton(onClick = onClose) { Text("Close") } })
 }
 
 @Composable
