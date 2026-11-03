@@ -14,19 +14,25 @@ class WeaveNotificationListener : NotificationListenerService() {
             val extras = sbn.notification.extras
             val sender = extras.getString(Notification.EXTRA_TITLE)?.trim() ?: "Unknown"
             
+            // Safe extraction for all Android versions
+            val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+            val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+            val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+            
             var finalMessage = ""
-            val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
-            if (messages != null && messages.isNotEmpty()) {
-                val lastMsg = android.app.Notification.MessagingStyle.Message.getMessageFromBundleArray(messages)?.lastOrNull()
-                finalMessage = lastMsg?.text?.toString() ?: ""
+            if (textLines != null && textLines.isNotEmpty()) {
+                finalMessage = textLines.joinToString("\n") { it.toString() }
+            } else if (bigText.isNotEmpty()) {
+                finalMessage = bigText
             } else {
-                finalMessage = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+                finalMessage = text
             }
 
             if (finalMessage.isNotEmpty() && !finalMessage.contains("END-TO-END")) {
                 val lowerMsg = finalMessage.lowercase()
-                // Exact match for deleted messages only
-                val isDeleteEvent = lowerMsg == "this message was deleted" || lowerMsg == "you deleted this message" || lowerMsg.contains("message was deleted")
+                val isDeleteEvent = lowerMsg == "this message was deleted" || 
+                                    lowerMsg == "you deleted this message" || 
+                                    lowerMsg.contains("message was deleted")
 
                 val db = DatabaseProvider.getDatabase(applicationContext)
 
