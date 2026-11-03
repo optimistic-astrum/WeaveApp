@@ -7,20 +7,12 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
-
-    <application 
-        android:allowBackup="false" 
-        android:icon="@mipmap/ic_launcher" 
-        android:label="Weave" 
-        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" 
-        android:requestLegacyExternalStorage="true">
-        
+    <application android:allowBackup="false" android:icon="@mipmap/ic_launcher" android:label="Weave" android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" android:requestLegacyExternalStorage="true">
         <activity android:name=".SplashActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
         <activity android:name=".MainActivity" android:exported="false" />
         <activity android:name=".ChatDetailActivity" android:exported="false" />
-        
         <service android:name=".WeaveNotificationListener" android:label="Weave Notifications" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true">
             <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
         </service>

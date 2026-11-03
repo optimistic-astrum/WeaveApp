@@ -16,9 +16,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -36,10 +35,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,8 +61,8 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val prefs = context.getSharedPreferences("weave_prefs", Context.MODE_PRIVATE)
             var isSetupDone by remember { mutableStateOf(prefs.getBoolean("setup_done", false)) }
+            var isUnlocked by remember { mutableStateOf(false) } // App Lock State
             var currentTheme by remember { mutableStateOf(WeaveTheme.valueOf(prefs.getString("theme", "DARK") ?: "DARK")) }
-            var appLanguage by remember { mutableStateOf(prefs.getString("language", "EN") ?: "EN") }
 
             val colorScheme = when (currentTheme) {
                 WeaveTheme.DARK -> DarkColors
@@ -69,11 +71,13 @@ class MainActivity : ComponentActivity() {
                 WeaveTheme.SUNSET -> SunsetColors
             }
 
-            MaterialTheme(colorScheme = colorScheme) {
+            MaterialTheme(colorScheme = colorScheme) { // Default system clean font
                 if (!isSetupDone) {
                     SetupScreen(context) { prefs.edit().putBoolean("setup_done", true).apply(); isSetupDone = true }
+                } else if (!isUnlocked) {
+                    PinLockScreen { isUnlocked = true }
                 } else {
-                    MainLayout(currentTheme, appLanguage, onThemeChange = { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme }, onLanguageChange = { newLang -> prefs.edit().putString("language", newLang).apply(); appLanguage = newLang })
+                    MainLayout(currentTheme, onThemeChange = { newTheme -> prefs.edit().putString("theme", newTheme.name).apply(); currentTheme = newTheme })
                 }
             }
         }
@@ -86,7 +90,7 @@ fun isBatteryOptimizationDisabled(context: Context): Boolean = (context.getSyste
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
-fun MainLayout(currentTheme: WeaveTheme, appLanguage: String, onThemeChange: (WeaveTheme) -> Unit, onLanguageChange: (String) -> Unit) {
+fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
     var showScreen by remember { mutableStateOf(0) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -131,7 +135,7 @@ fun MainLayout(currentTheme: WeaveTheme, appLanguage: String, onThemeChange: (We
                         1 -> ChatScreen()
                         2 -> GroupScreen()
                         3 -> GhostVaultScreen()
-                        4 -> SettingsScreen(currentTheme, appLanguage, onThemeChange, onLanguageChange)
+                        4 -> SettingsScreen(currentTheme, onThemeChange)
                         5 -> MediaVaultScreen()
                         6 -> DPDownloaderScreen()
                     }
@@ -194,14 +198,20 @@ fun DashboardScreen() {
         Text("Recent Chats", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
         Spacer(modifier = Modifier.height(8.dp))
         
-        LazyColumn { 
-            items(recentChats.toList().take(3)) { (sender, lastMsg) -> 
-                ContactChatCard(sender, lastMsg) {
-                    val intent = Intent(context, ChatDetailActivity::class.java)
-                    intent.putExtra("contact_name", sender)
-                    context.startActivity(intent)
-                }
-            } 
+        if (recentChats.isEmpty()) {
+            Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                Text("No messages yet.\nWaiting for new notifications...", textAlign = TextAlign.Center, color = Color.Gray)
+            }
+        } else {
+            LazyColumn { 
+                items(recentChats.toList().take(3)) { (sender, lastMsg) -> 
+                    ContactChatCard(sender, lastMsg) {
+                        val intent = Intent(context, ChatDetailActivity::class.java)
+                        intent.putExtra("contact_name", sender)
+                        context.startActivity(intent)
+                    }
+                } 
+            }
         }
     }
 }
@@ -311,7 +321,6 @@ fun MediaVaultScreen() {
     }
 }
 
-// MODERN DP DOWNLOADER SCREEN
 @Composable
 fun DPDownloaderScreen() {
     val context = LocalContext.current
@@ -344,14 +353,9 @@ fun DPDownloaderScreen() {
             }
         }
 
-        // Web-style search bar
         OutlinedTextField(
-            value = number, 
-            onValueChange = { number = it }, 
-            label = { Text("Enter WhatsApp Number") }, 
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            shape = RoundedCornerShape(16.dp)
+            value = number, onValueChange = { number = it }, label = { Text("Enter WhatsApp Number") }, 
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), shape = RoundedCornerShape(16.dp)
         )
         
         Button(
@@ -361,31 +365,20 @@ fun DPDownloaderScreen() {
                     val cleanNumber = number.replace("+", "").trim()
                     val destPath = "/sdcard/Download/dp_${cleanNumber}.jpg"
                     val command = "cp /storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp\\ Profile\\ Photos/*${cleanNumber}* $destPath"
-                    
-                    val result = ShizukuManager.executeCommand(command)
+                    ShizukuManager.executeCommand(command)
                     val file = File(destPath)
-                    
-                    if (file.exists()) {
-                        previewImagePath = destPath
-                        Toast.makeText(context, "DP Found!", Toast.LENGTH_SHORT).show()
-                    } else {
+                    if (file.exists()) { previewImagePath = destPath; Toast.makeText(context, "DP Found!", Toast.LENGTH_SHORT).show() } 
+                    else {
                         val shortNumber = cleanNumber.takeLast(10)
                         val command2 = "cp /storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp\\ Profile\\ Photos/*${shortNumber}* $destPath"
                         ShizukuManager.executeCommand(command2)
-                        if (file.exists()) {
-                            previewImagePath = destPath
-                            Toast.makeText(context, "DP Found!", Toast.LENGTH_SHORT).show()
-                        } else {
-                            previewImagePath = null
-                            Toast.makeText(context, "DP not found for this number.", Toast.LENGTH_LONG).show()
-                        }
+                        if (file.exists()) { previewImagePath = destPath; Toast.makeText(context, "DP Found!", Toast.LENGTH_SHORT).show() } 
+                        else { previewImagePath = null; Toast.makeText(context, "DP not found.", Toast.LENGTH_LONG).show() }
                     }
                     isScanning = false
                 } else { Toast.makeText(context, "Connect Shizuku or enter valid number", Toast.LENGTH_SHORT).show() }
             }, 
-            modifier = Modifier.fillMaxWidth().height(56.dp), 
-            shape = RoundedCornerShape(16.dp),
-            enabled = !isScanning
+            modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp), enabled = !isScanning
         ) { 
             if (isScanning) { CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp)) } 
             else { Text("Scan & Download DP", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
@@ -393,20 +386,10 @@ fun DPDownloaderScreen() {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // 3D Web-style Preview Card
         previewImagePath?.let { path ->
-            Card(
-                shape = RoundedCornerShape(24.dp), 
-                elevation = CardDefaults.cardElevation(12.dp),
-                modifier = Modifier.fillMaxWidth().wrapContentHeight()
-            ) {
+            Card(shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(12.dp), modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
                 Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    AsyncImage(
-                        model = File(path),
-                        contentDescription = "DP Preview",
-                        modifier = Modifier.size(180.dp).clip(RoundedCornerShape(16.dp)),
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                    )
+                    AsyncImage(model = File(path), contentDescription = "DP Preview", modifier = Modifier.size(180.dp).clip(RoundedCornerShape(16.dp)), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Profile Picture Found!", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -433,17 +416,11 @@ fun MessageCard(notif: NotificationEntity) {
                     ActionButton(Icons.Default.ContentCopy, "Copy") {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("Message", notif.message))
-                        Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
-                        showSheet = false
+                        Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show(); showSheet = false
                     }
                     ActionButton(Icons.Default.Share, "Share") {
                         val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, notif.message) }
-                        context.startActivity(Intent.createChooser(intent, "Share Message"))
-                        showSheet = false
-                    }
-                    ActionButton(Icons.Default.Delete, "Delete") {
-                        Toast.makeText(context, "Deleted from UI (Mock)", Toast.LENGTH_SHORT).show()
-                        showSheet = false
+                        context.startActivity(Intent.createChooser(intent, "Share Message")); showSheet = false
                     }
                 }
                 Spacer(modifier = Modifier.height(32.dp))
@@ -482,7 +459,7 @@ fun ActionButton(icon: ImageVector, label: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun SettingsScreen(currentTheme: WeaveTheme, appLanguage: String, onThemeChange: (WeaveTheme) -> Unit, onLanguageChange: (String) -> Unit) {
+fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
     val context = LocalContext.current
     var notifAccess by remember { mutableStateOf(isNotificationAccessGranted(context)) }
     var batteryOpt by remember { mutableStateOf(isBatteryOptimizationDisabled(context)) }
@@ -504,26 +481,15 @@ fun SettingsScreen(currentTheme: WeaveTheme, appLanguage: String, onThemeChange:
         }
 
         Spacer(modifier = Modifier.height(32.dp))
-        Text("App Language", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LangChip("English", "EN", appLanguage, onLanguageChange)
-            LangChip("Hindi", "HI", appLanguage, onLanguageChange)
-            LangChip("Urdu", "UR", appLanguage, onLanguageChange)
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
         Text("Permissions & Pro", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp)
         Spacer(modifier = Modifier.height(12.dp))
         
         SettingsCard("Notification Access", if (notifAccess) "Granted ✓" else "Tap to Grant", Icons.Default.Notifications, if(notifAccess) Color.Green else Color.Red) { 
             context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) 
         }
-        
         SettingsCard("Battery Optimization", if (batteryOpt) "Disabled ✓" else "Tap to Disable", Icons.Default.BatteryFull, if(batteryOpt) Color.Green else Color.Red) { 
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS); intent.data = Uri.parse("package:${context.packageName}"); context.startActivity(intent) 
         }
-
         SettingsCard("Shizuku Pro Mode", if (shizukuConnected) "Connected ✓" else "Tap to Connect", Icons.Default.Build, if(shizukuConnected) Color.Green else Color.Red) { 
             if (Shizuku.pingBinder()) { ShizukuManager.requestPermission(1001) } else { Toast.makeText(context, "Open Shizuku app first", Toast.LENGTH_LONG).show() }
         }
@@ -536,10 +502,7 @@ fun SettingsCard(title: String, subTitle: String, icon: ImageVector, subTitleCol
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                Text(subTitle, color = subTitleColor, fontSize = 12.sp)
-            }
+            Column { Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface); Text(subTitle, color = subTitleColor, fontSize = 12.sp) }
         }
     }
 }
@@ -548,14 +511,6 @@ fun SettingsCard(title: String, subTitle: String, icon: ImageVector, subTitleCol
 fun ThemeChip(label: String, theme: WeaveTheme, selectedTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
     val isSelected = theme == selectedTheme
     Card(modifier = Modifier.clickable { onThemeChange(theme) }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)) {
-        Text(label, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-fun LangChip(label: String, code: String, selectedLang: String, onLanguageChange: (String) -> Unit) {
-    val isSelected = code == selectedLang
-    Card(modifier = Modifier.clickable { onLanguageChange(code) }, shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)) {
         Text(label, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
@@ -580,5 +535,28 @@ fun SetupScreen(context: Context, onFinish: () -> Unit) {
         
         Spacer(modifier = Modifier.height(48.dp))
         Button(onClick = onFinish, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp)) { Text("Continue to App", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+fun PinLockScreen(onUnlock: () -> Unit) {
+    var pin by remember { mutableStateOf("") }
+    val correctPin = "1234" // Default PIN
+    
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Icon(Icons.Default.Lock, contentDescription = "Lock", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(64.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Enter PIN to Unlock", color = MaterialTheme.colorScheme.primary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        OutlinedTextField(
+            value = pin, onValueChange = { if (it.length <= 4) pin = it }, label = { Text("4-Digit PIN") }, modifier = Modifier.width(200.dp), 
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = { if (pin == correctPin) onUnlock() else Toast.makeText(null, "Wrong PIN", Toast.LENGTH_SHORT).show() }, modifier = Modifier.width(200.dp).height(50.dp)) {
+            Text("Unlock")
+        }
     }
 }
