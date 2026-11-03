@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -88,7 +89,7 @@ fun isBatteryOptimizationDisabled(context: Context): Boolean {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
-    var showScreen by remember { mutableStateOf(0) } // 0=Home, 1=Chats, 2=Groups, 3=Ghost, 4=Settings, 5=Media, 6=Status, 7=DP, 8=Stealth
+    var showScreen by remember { mutableStateOf(0) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -105,9 +106,7 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
                 DrawerItem("Groups", Icons.Default.Group, showScreen == 2) { showScreen = 2; scope.launch { drawerState.close() } }
                 DrawerItem("Ghost Vault", Icons.Default.Delete, showScreen == 3) { showScreen = 3; scope.launch { drawerState.close() } }
                 DrawerItem("Media Vault", Icons.Default.Photo, showScreen == 5) { showScreen = 5; scope.launch { drawerState.close() } }
-                DrawerItem("Status Downloader", Icons.Default.PhotoCamera, showScreen == 6) { showScreen = 6; scope.launch { drawerState.close() } }
                 DrawerItem("DP Downloader", Icons.Default.Download, showScreen == 7) { showScreen = 7; scope.launch { drawerState.close() } }
-                DrawerItem("Stealth Read", Icons.Default.VisibilityOff, showScreen == 8) { showScreen = 8; scope.launch { drawerState.close() } }
                 DrawerItem("Settings", Icons.Default.Settings, showScreen == 4) { showScreen = 4; scope.launch { drawerState.close() } }
                 Spacer(modifier = Modifier.weight(1f))
                 Text("Developed by Arif Ali", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(16.dp))
@@ -136,9 +135,7 @@ fun MainLayout(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit) {
                         3 -> GhostVaultScreen()
                         4 -> SettingsScreen(currentTheme, onThemeChange)
                         5 -> MediaVaultScreen()
-                        6 -> StatusDownloaderScreen()
                         7 -> DPDownloaderScreen()
-                        8 -> StealthReadScreen()
                     }
                 }
             }
@@ -212,7 +209,8 @@ fun ChatScreen() {
     val context = LocalContext.current
     val db = DatabaseProvider.getDatabase(context)
     var chats by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
-    LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { chats = it.filter { msg -> !msg.sender.contains("Group") } } }
+    // Individual chats usually don't have (Group Name) format in title
+    LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { chats = it.filter { msg -> !msg.sender.contains("(") } } }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(chats) { notif -> MessageCard(notif) } } }
 }
 
@@ -221,7 +219,8 @@ fun GroupScreen() {
     val context = LocalContext.current
     val db = DatabaseProvider.getDatabase(context)
     var groups by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
-    LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { groups = it.filter { msg -> msg.sender.contains("Group") } } }
+    // Groups have format: "Group Name (Sender)"
+    LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { groups = it.filter { msg -> msg.sender.contains("(") } } }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(groups) { notif -> MessageCard(notif) } } }
 }
 
@@ -246,7 +245,7 @@ fun HomeScreen() {
     val db = DatabaseProvider.getDatabase(context)
     var notifications by remember { mutableStateOf<List<NotificationEntity>>(emptyList()) }
     LaunchedEffect(Unit) { db.notificationDao().getAllNotifications().collectLatest { notifications = it } }
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(notifications.take(5)) { notif -> MessageCard(notif) } } }
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) { LazyColumn { items(notifications.take(10)) { notif -> MessageCard(notif) } } }
 }
 
 @Composable
@@ -277,33 +276,24 @@ fun MediaVaultScreen() {
 }
 
 @Composable
-fun StatusDownloaderScreen() {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Status Downloader", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Statuses will appear here automatically.", color = Color.Gray)
-    }
-}
-
-@Composable
 fun DPDownloaderScreen() {
+    val context = LocalContext.current
+    var number by remember { mutableStateOf("") }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("DP Downloader", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text("WhatsApp DP Downloader", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Spacer(modifier = Modifier.height(16.dp))
-        OutlinedTextField(value = "", onValueChange = {}, label = { Text("Enter WhatsApp Number") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = number, onValueChange = { number = it }, label = { Text("Enter Number (e.g. 923001234567)") }, modifier = Modifier.fillMaxWidth())
         Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Download Profile Picture") }
-    }
-}
-
-@Composable
-fun StealthReadScreen() {
-    var isStealthOn by remember { mutableStateOf(false) }
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Stealth Mode (Blue Tick Bypass)", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Spacer(modifier = Modifier.height(16.dp))
-        Switch(checked = isStealthOn, onCheckedChange = { isStealthOn = it })
-        Text(if (isStealthOn) "Stealth ON: Messages will not turn blue." else "Stealth OFF", color = if(isStealthOn) Color.Green else Color.Gray)
+        Button(onClick = { 
+            if (number.length > 9) {
+                // Open WhatsApp chat directly to view DP
+                val uri = Uri.parse("https://wa.me/$number")
+                val intent = Intent(Intent.ACTION_VIEW, uri)
+                context.startActivity(intent)
+            } else {
+                Toast.makeText(context, "Please enter a valid number", Toast.LENGTH_SHORT).show()
+            }
+        }, modifier = Modifier.fillMaxWidth()) { Text("View Profile Picture") }
     }
 }
 
@@ -347,6 +337,16 @@ fun SettingsScreen(currentTheme: WeaveTheme, onThemeChange: (WeaveTheme) -> Unit
                     Text("Battery Optimization", fontWeight = FontWeight.Bold)
                     Text(if (batteryOpt) "Disabled ✓" else "Tap to Disable", color = if (batteryOpt) Color.Green else Color.Red, fontSize = 12.sp)
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Data Management", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(8.dp))
+        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), elevation = CardDefaults.cardElevation(4.dp)) {
+            Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Haptic Feedback (Vibration)", fontWeight = FontWeight.Bold)
+                Switch(checked = hapticEnabled, onCheckedChange = { hapticEnabled = it })
             }
         }
     }
