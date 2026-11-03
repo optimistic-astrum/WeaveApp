@@ -10,7 +10,7 @@
 
     <application 
         android:allowBackup="false" 
-        android:icon="@drawable/app_logo" 
+        android:icon="@mipmap/ic_launcher" 
         android:label="Weave" 
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" 
         android:requestLegacyExternalStorage="true">
