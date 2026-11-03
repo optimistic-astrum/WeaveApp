@@ -355,16 +355,18 @@ fun DPDownloaderScreen() {
                     isScanning = true
                     val cleanNumber = number.replace("+", "").trim()
                     val destPath = "/sdcard/Download/dp_${cleanNumber}.jpg"
-                    val command = "cp /storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp\\ Profile\\ Photos/*${cleanNumber}* $destPath"
+                    
+                    // Shizuku command to find and copy the DP image
+                    val command = "cp \$(find /storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp\\ Profile\\ Photos/ -name '*${cleanNumber}*' | head -n 1) $destPath 2>/dev/null"
                     ShizukuManager.executeCommand(command)
+                    
                     val file = File(destPath)
-                    if (file.exists()) { previewImagePath = destPath; Toast.makeText(context, "DP Found!", Toast.LENGTH_SHORT).show() } 
-                    else {
-                        val shortNumber = cleanNumber.takeLast(10)
-                        val command2 = "cp /storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp\\ Profile\\ Photos/*${shortNumber}* $destPath"
-                        ShizukuManager.executeCommand(command2)
-                        if (file.exists()) { previewImagePath = destPath; Toast.makeText(context, "DP Found!", Toast.LENGTH_SHORT).show() } 
-                        else { previewImagePath = null; Toast.makeText(context, "DP not found.", Toast.LENGTH_LONG).show() }
+                    if (file.exists() && file.length() > 0) { 
+                        previewImagePath = destPath
+                        Toast.makeText(context, "DP Found!", Toast.LENGTH_SHORT).show() 
+                    } else { 
+                        previewImagePath = null
+                        Toast.makeText(context, "DP not found.", Toast.LENGTH_LONG).show() 
                     }
                     isScanning = false
                 } else { Toast.makeText(context, "Connect Shizuku or enter valid number", Toast.LENGTH_SHORT).show() }
