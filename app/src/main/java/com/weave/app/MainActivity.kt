@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// Global Shizuku Listener
 val shizukuListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
     if (grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED) {
         ShizukuManager.isGranted = true

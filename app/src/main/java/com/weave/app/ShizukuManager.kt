@@ -3,8 +3,8 @@ import android.content.pm.PackageManager
 import rikka.shizuku.Shizuku
 
 object ShizukuManager {
+    // Public setter taaki MainActivity se update ho sake
     var isGranted = false
-        private set
 
     fun checkPermission(): Boolean {
         if (Shizuku.isPreV11() || Shizuku.getVersion() < 11) return false
@@ -24,7 +24,11 @@ object ShizukuManager {
     fun executeCommand(cmd: String): String {
         if (!isGranted) return "Error: Permission not granted"
         return try {
-            val process = Shizuku.newProcess(arrayOf("sh", "-c", cmd), null, null)
+            // Shizuku.newProcess reflection se call hota hai
+            val process = Shizuku::class.java.getDeclaredMethod("newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
+                .apply { isAccessible = true }
+                .invoke(null, arrayOf("sh", "-c", cmd), null, null) as Process
+            
             val output = process.inputStream.bufferedReader().readText()
             process.waitFor()
             output
